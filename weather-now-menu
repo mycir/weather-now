@@ -1,0 +1,356 @@
+#!/bin/bash
+
+# shellcheck disable=SC1090,1091
+
+NL=$'\n'
+TAB=$'\t'
+# unicode justification markers
+LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
+RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
+# default language
+LANGUAGE="en"
+LANGUAGE_DIRECTION="LTR"
+
+trap "exit 1" TERM
+export TOP_PID=$$
+
+error_exit() {
+    cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1"
+    output_info="$TEXT_OUTPUT:${NL}${NL}$3"
+    if ! zenity --question --title="$TITLE - $TEXT_ERROR" \
+        --no-markup --text="$cmd_info${NL}${NL}$output_info" \
+        --cancel-label="${LRM}$ERROR_BTN_RETRY" \
+        --ok-label="${LRM}$ERROR_BTN_EXIT" \
+        --icon=data-warning 2> /dev/null ; then
+        echo 1
+    else
+        kill -s TERM $TOP_PID
+        echo 0
+    fi
+}
+
+exec_command() {
+    command="$1"
+    status=1
+    while (( status )); do
+        output="$(eval "$command" 2>&1)"
+        status=$?
+        if (( status )); then
+            >&2 echo "$output"
+            status=$(error_exit "$command" "$status" "$output")
+        else
+            echo "$output"
+        fi
+    done
+}
+
+check_lang() {
+    codes=$(trans --list-codes)
+
+    for code in $codes ; do
+        [[ "$code" == "$1" ]] && return
+    done
+
+    err_text="Invalid language code: $1"
+    >&2 echo "$err_text"
+    zenity --error --title="$TITLE - Error" --text="$err_text"
+    kill -s TERM $TOP_PID
+}
+
+strip_prefixes() {
+    [[ "$LANGUAGE_DIRECTION" == "RTL" ]] && \
+        pattern=".*\p{L}" || pattern="\p{L}.*"
+    printf '%s\n' "$1" | grep -oP "${pattern}"
+}
+
+translate_locations() {
+    local locations=$1'[@]'
+    local lang=$2
+    local output_file=$3
+    local trans_input
+    local trans_output
+    local location
+
+    for location in "${!locations}"; do
+        trans_input+="${location%:*}${NL}"
+    done
+
+    trans_output="$(exec_command "echo -e \"$trans_input\" | \
+        trans -b -e auto -4 en:$lang")"
+    echo "LOCATIONS_NATIVE=(" > "$output_file"
+    while read -r line; do
+        echo "${TAB}\"${line}\"" >> "$output_file"
+    done < <(echo "$trans_output")
+    echo ")" >> "$output_file"
+}
+
+translate_labels() {
+    local labels=$1'[@]'
+    local label_ids=$2'[@]'
+    local lang=$3
+    local output_file=$4
+    local prefix=$5
+    local trans_input
+    local trans_output
+    local translated_lines
+
+    for label in "${!labels}"; do
+        trans_input+="$prefix$label${NL}"
+    done
+
+    trans_output="$(exec_command "echo -e \"$trans_input\" | \
+        trans -b -e auto -4 en:$lang")"
+
+    if [[ -n "$prefix" ]]; then
+        translated_lines="$(strip_prefixes "$trans_output")"
+    else
+        translated_lines="$trans_output"
+    fi
+
+    mapfile -t translations <<< "$translated_lines"
+
+    local i=0
+    for id in "${!label_ids}"; do
+        translation="${translations[$i]}"
+        echo "$id=\"${translation#"${translation%%[![:space:]]*}"}\"" \
+            >> "$output_file"
+        (( i=++i ))
+    done
+}
+
+translate_codes() {
+    local codes=$1'[@]'
+    local lang=$2
+    local output_file=$3
+    local trans_input
+    local trans_output
+    local translated_lines
+    local code
+    local i=0
+
+    for code in "${!codes}"; do
+        [[ $code == "" ]] && code="unknown"
+        trans_input+="$i: $code${NL}"
+        (( ++i ))
+    done
+
+    trans_output="$(exec_command "echo -e \"$trans_input\" \
+        | trans -b -e auto -4 en:$lang")"
+    translated_lines="$(strip_prefixes "$trans_output")"
+
+    echo "CONDITIONS_NATIVE=(" > "$output_file"
+    while read -r line; do
+        echo "${TAB}\"${line}\"" >> "$output_file"
+    done < <(echo "$translated_lines")
+    echo ")" >> "$output_file"
+}
+
+label_weather() {
+    local weather
+
+    while IFS=':' read -r parameter value ; do
+
+        if [[ "$parameter$value" == "" ]] ; then
+            weather+="${NL}"
+            continue
+        fi
+
+        typeset -u param_uppercase="$parameter"
+        label_id="${param_uppercase// /_}"
+        label_value=${!label_id}
+
+        if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
+            weather+="${RLM}$label_value: ${LRM}$value${LRM}${NL}${RLM}"
+        else
+            weather+="$label_value: $value${NL}"
+        fi
+
+    done <<< "$1"
+
+    echo "$weather"
+}
+
+script_path="${0}"
+
+while [ -L "${script_path}" ] ; do
+    path="$(readlink "${script_path}")"
+    [[ "${path}" == /* ]] && script_path="$path" || \
+        script_path="$(dirname "${script_path}")/${path}"
+done
+
+script_dir="$(dirname "${script_path}")"
+
+source "$script_dir/weather-now-menu.conf"
+locations_file="$script_dir/locations"
+locations_native_file="$script_dir/locations-native"
+labels_native_file="$script_dir/labels-native"
+conditions_native_file="$script_dir/conditions-native"
+last_location_file="$script_dir/last-location"
+
+[[ -e "$locations_file" ]] && source "${locations_file}"
+
+if [[ -n "$1"  ]] ; then
+    check_lang "$1"
+    rm -f "$last_location_file"
+    rm -f "$labels_native_file"
+    rm -f "$conditions_native_file"
+    LANGUAGE_DIRECTION="LTR"
+    if [[ "$1" ==  "en" ]] ; then
+        rm -f "$locations_native_file"
+    else
+        echo "LANGUAGE=\"$1\"" > "$labels_native_file"
+        if trans -L "$1" | grep -q "R-to-L" ; then
+            LANGUAGE_DIRECTION="RTL"
+            echo 'LANGUAGE_DIRECTION="RTL"' >> "$labels_native_file"
+        else
+            echo 'LANGUAGE_DIRECTION="LTR"' >> "$labels_native_file"
+        fi
+        coproc convert_dlg { zenity --progress --pulsate \
+            --no-cancel --auto-close \
+            --title="$TITLE" \
+            --text="Translating labels and locations..." ; }
+        # translate_labels <labels> <label ids> <lang> <output file> [prefix]
+        # where prefix is used to influence translate-shell results
+        translate_locations LOCATIONS "$1" "$locations_native_file"
+        translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "1: "
+        translate_labels PARAMETER_LABELS PARAMETER_IDS "$1" "$labels_native_file"
+        translate_codes CONDITIONS "$1" "$conditions_native_file"
+        echo 100  >&"${convert_dlg[1]}"
+    fi
+fi
+
+[[ -e "$locations_native_file" ]] && source "${locations_native_file}"
+[[ -e "$labels_native_file" ]] && source "${labels_native_file}"
+[[ -e "$conditions_native_file" ]] && source "${conditions_native_file}"
+
+while true; do
+
+    if [ -n "${last_location+x}" ] ; then
+        unset location_data
+        results=""
+    fi
+    if [[ -f "$last_location_file" ]]; then
+        if [[ "$LANGUAGE" == "en" ]] ; then
+            IFS=':' read -r placename country_code index \
+                < <(cat "$last_location_file")
+        else
+            IFS=':' read -r placename_native placename country_code index \
+                < <(cat "$last_location_file")
+        fi
+        # shellcheck disable=SC2153
+        if [[ " ${LOCATIONS[*]} " =~ ${placename}:${country_code} ]]; then
+            if [[ "$LANGUAGE" == en ]] ; then
+                location_data+=( "$placename" "$country_code" "$index" )
+            else
+                location_data+=( "$placename_native" "$placename" \
+                    "$country_code" "$index" )
+            fi
+        fi
+    fi
+
+    for (( i=0; i < ${#LOCATIONS[@]}; i++ )); do
+        loc="${LOCATIONS[$i]}"
+        [[ "$loc" == "$placename:$country_code" ]] && continue
+        if [[ "$LANGUAGE" == en ]] ; then
+            location_data+=( "${loc%:*}" "${loc#*:}" "$i" )
+        else
+            location_data+=( "${LOCATIONS_NATIVE[$i]}" \
+                "${loc%:*}" "${loc#*:}" "$i" )
+        fi
+    done
+
+    if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
+        width=600;height=600
+    else
+        width=500;height=400
+    fi
+
+    if [[ "$LANGUAGE" == "en" ]] ; then
+        location=$(zenity --list \
+            --title="$TITLE" \
+            --text="$MENU_TEXT:" \
+            --width="$width" \
+            --height="$height" \
+            --separator=":" \
+            --column="$COLUMN_LOCATION" \
+            --column="$COLUMN_COUNTRY_CODE" \
+            --column="$COLUMN_INDEX" \
+            --hide-column=3 \
+            --print-column=ALL \
+            --cancel-label="${LRM}$MENU_BTN_CANCEL" \
+            --ok-label="${LRM}$MENU_BTN_OK" \
+            "${location_data[@]}")
+    else
+        location=$(zenity --list \
+            --title="$TITLE" \
+            --text="$MENU_TEXT:" \
+            --width="$width" \
+            --height="$height" \
+            --separator=":" \
+            --column="$COLUMN_LOCATION_NATIVE" \
+            --column="$COLUMN_LOCATION" \
+            --column="$COLUMN_COUNTRY_CODE" \
+            --column="$COLUMN_INDEX" \
+            --hide-column=4 \
+            --print-column=ALL \
+            --cancel-label="${LRM}$MENU_BTN_CANCEL" \
+            --ok-label="${LRM}$MENU_BTN_OK" \
+            "${location_data[@]}")
+    fi
+
+    [[ -z "$location" ]] && exit 0
+
+    if [[ "$LANGUAGE" == "en" ]] ; then
+        IFS=':' read -r placename country_code index < <(echo "$location")
+        place="$placename"
+    else
+        IFS=':' read -r placename_native placename country_code index \
+            < <(echo "$location")
+        place="$placename_native"
+    fi
+
+    while read -r line; do
+        k="${line%%:*}"
+        v=${line#*: }
+        case $k in
+        "Location" )
+            continue;;
+        "Weather code" )
+            if [[ "$LANGUAGE" != "en" ]] ; then
+                code=$v
+            fi
+            ;;
+        "Symbol" )
+            symbol=$v ;;
+        "Conditions")
+            if [[ "$LANGUAGE" != "en" ]] ; then
+                conditions=${CONDITIONS_NATIVE["$code"]}
+                line="$k: $conditions"
+            fi
+            results+="$line"$'\n';;
+        *)
+            results+="$line"$'\n';;
+        esac
+
+    done < <(exec_command "\"$script_dir/weather_now.py\" \
+        -l \"$placename\" -c \"$country_code\" \
+        -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
+        -w \"$WIND_SPEED_UNIT\" -o \"data\"")
+
+    if [[ "$LANGUAGE" == "en" ]] ; then
+        weather="$results"
+    else
+        weather=$(label_weather "$(printf "%b" "$results")")
+    fi
+
+    zenity --forms --title="$TITLE${NL}$place${NL}${NL}$symbol" \
+        --text="$weather${PADDING}" --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
+        --ok-label="${LRM}$RESULTS_BTN_OK"
+
+    exit_code=$?
+    last_location="$location"
+    echo "$last_location" > "$last_location_file"
+
+    (( exit_code )) && break
+
+done
