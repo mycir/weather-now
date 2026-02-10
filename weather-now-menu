@@ -76,7 +76,7 @@ translate_locations() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e auto -4 en:$lang")"
+        trans -b -e \"$ENGINE\" -4 en:$lang")"
     echo "LOCATIONS_NATIVE=(" > "$output_file"
     while read -r line; do
         echo "${TAB}\"${line}\"" >> "$output_file"
@@ -99,7 +99,7 @@ translate_labels() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e auto -4 en:$lang")"
+        trans -b -e \"$ENGINE\" -4 en:$lang")"
 
     if [[ -n "$prefix" ]]; then
         translated_lines="$(strip_prefixes "$trans_output")"
@@ -135,7 +135,7 @@ translate_codes() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" \
-        | trans -b -e auto -4 en:$lang")"
+        | trans -b -e \"$ENGINE\" -4 en:$lang")"
     translated_lines="$(strip_prefixes "$trans_output")"
 
     echo "CONDITIONS_NATIVE=(" > "$output_file"
@@ -205,7 +205,7 @@ if [[ -n "$1"  ]] ; then
         else
             echo 'LANGUAGE_DIRECTION="LTR"' >> "$labels_native_file"
         fi
-        coproc convert_dlg { zenity --progress --pulsate \
+        coproc progress_dlg { zenity --progress --pulsate \
             --no-cancel --auto-close \
             --title="$TITLE" \
             --text="Translating labels and locations..." ; }
@@ -215,7 +215,7 @@ if [[ -n "$1"  ]] ; then
         translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "1: "
         translate_labels PARAMETER_LABELS PARAMETER_IDS "$1" "$labels_native_file"
         translate_codes CONDITIONS "$1" "$conditions_native_file"
-        echo 100  >&"${convert_dlg[1]}"
+        echo 100  >&"${progress_dlg[1]}"
     fi
 fi
 
@@ -314,24 +314,20 @@ while true; do
         v=${line#*: }
         case $k in
         "Location" )
-            continue;;
+            continue ;;
         "Weather code" )
-            if [[ "$LANGUAGE" != "en" ]] ; then
-                code=$v
-            fi
-            ;;
+            [[ "$LANGUAGE" != "en" ]] && code=$v ;;
         "Symbol" )
             symbol=$v ;;
         "Conditions")
-            if [[ "$LANGUAGE" != "en" ]] ; then
-                conditions=${CONDITIONS_NATIVE["$code"]}
-                line="$k: $conditions"
-            fi
-            results+="$line"$'\n';;
+            if [[ "$LANGUAGE" == "en" ]] ; then
+                results+="$line${NL}"
+            else
+                results+="$k: ${CONDITIONS_NATIVE["$code"]}${NL}"
+            fi ;;
         *)
-            results+="$line"$'\n';;
+            results+="$line${NL}" ;;
         esac
-
     done < <(exec_command "\"$script_dir/weather_now.py\" \
         -l \"$placename\" -c \"$country_code\" \
         -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
