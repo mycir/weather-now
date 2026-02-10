@@ -76,7 +76,7 @@ translate_locations() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e \"$ENGINE\" -4 en:$lang")"
+        trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
     echo "LOCATIONS_NATIVE=(" > "$output_file"
     while read -r line; do
         echo "${TAB}\"${line}\"" >> "$output_file"
@@ -99,7 +99,7 @@ translate_labels() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e \"$ENGINE\" -4 en:$lang")"
+        trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
 
     if [[ -n "$prefix" ]]; then
         translated_lines="$(strip_prefixes "$trans_output")"
@@ -135,7 +135,7 @@ translate_codes() {
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" \
-        | trans -b -e \"$ENGINE\" -4 en:$lang")"
+        | trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
     translated_lines="$(strip_prefixes "$trans_output")"
 
     echo "CONDITIONS_NATIVE=(" > "$output_file"
