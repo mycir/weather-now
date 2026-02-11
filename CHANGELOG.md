@@ -1,6 +1,10 @@
 # Changelog
 
-## Feb. 2026
+## Feb. 2026 ii.
+
+- Additional weather parameters for special interests.
+
+## Feb. 2026 i.
 
 - Parsing of command line arguments.
 - Geocode location placename to lat,lon.

@@ -156,13 +156,16 @@ label_weather() {
         fi
 
         typeset -u param_uppercase="$parameter"
-        label_id="${param_uppercase// /_}"
+        label_id="${param_uppercase//[ ,]/_}"
         label_value=${!label_id}
 
-        if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
-            weather+="${RLM}$label_value: ${LRM}$value${LRM}${NL}${RLM}"
-        else
-            weather+="$label_value: $value${NL}"
+        if [ -n "${!label_id+x}" ] ; then
+            [[ "$label_value" == "*" ]] && label_value="$parameter"
+            if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
+                weather+="${RLM}$label_value: ${LRM}$value${LRM}${NL}${RLM}"
+            else
+                weather+="$label_value: $value${NL}"
+            fi
         fi
 
     done <<< "$1"
@@ -309,6 +312,12 @@ while true; do
         place="$placename_native"
     fi
 
+    if [[ "$CONFIG_NAME" == "simple" ]] ; then
+        output_type="data"
+    else
+        output_type="extra"
+    fi
+
     while read -r line; do
         k="${line%%:*}"
         v=${line#*: }
@@ -326,12 +335,20 @@ while true; do
                 results+="$k: ${CONDITIONS_NATIVE["$code"]}${NL}"
             fi ;;
         *)
+            if [[ "$LANGUAGE" == "en" ]] ; then 
+                typeset -u k_uppercase="$k"
+                label_id="${k_uppercase//[ ,]/_}"
+                if [[ ! " ${PARAMETER_IDS[*]} " =~ \
+                    [[:space:]]${label_id}[[:space:]] ]]; then
+                    continue
+                fi
+            fi
             results+="$line${NL}" ;;
         esac
     done < <(exec_command "\"$script_dir/weather_now.py\" \
         -l \"$placename\" -c \"$country_code\" \
         -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
-        -w \"$WIND_SPEED_UNIT\" -o \"data\"")
+        -w \"$WIND_SPEED_UNIT\" -o \"$output_type\"")
 
     if [[ "$LANGUAGE" == "en" ]] ; then
         weather="$results"
@@ -339,9 +356,16 @@ while true; do
         weather=$(label_weather "$(printf "%b" "$results")")
     fi
 
-    zenity --forms --title="$TITLE${NL}$place${NL}${NL}$symbol" \
-        --text="$weather${PADDING}" --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
-        --ok-label="${LRM}$RESULTS_BTN_OK"
+    if [[ "$output_type" == "data" ]] ; then
+        zenity --forms --title="$TITLE${NL}$place${NL}${NL}$symbol" \
+            --text="$weather${PADDING}" --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
+            --ok-label="${LRM}$RESULTS_BTN_OK"
+    else
+        zenity --text-info --title="$TITLE${NL}$place${NL}${NL}$symbol" \
+            --height=800 --width=600 --font="$RESULTS_FONT" \
+            --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
+            --ok-label="${LRM}$RESULTS_BTN_OK" <<< "$weather${PADDING}" 
+    fi
 
     exit_code=$?
     last_location="$location"

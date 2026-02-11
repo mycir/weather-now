@@ -9,6 +9,8 @@ import argparse
 import warnings
 import requests
 
+from textwrap import dedent
+
 warnings.filterwarnings("ignore")
 
 # Open-Meteo API endpoint
@@ -176,7 +178,7 @@ def get_weather_graphic(graphic_type, code, is_day):
     return graphic_type.get(f"{category}{suffix}", graphic_type["cloudy"])
 
 
-def fetch_weather(latitude, longitude, units):
+def fetch_weather(latitude, longitude, units, output_type):
     """Fetch current weather data from Open-Meteo API."""
     params = {
         "latitude": latitude,
@@ -200,6 +202,27 @@ def fetch_weather(latitude, longitude, units):
         ],
         "timezone": "auto"
     }
+
+    if output_type == "extra":
+        params["current"] += [
+            "dew_point_2m",
+            "wind_speed_80m",
+            "wind_speed_120m",
+            "wind_speed_180m",
+            "wind_direction_80m",
+            "wind_direction_120m",
+            "wind_direction_180m",
+            "cloud_cover_low",
+            "cloud_cover_mid",
+            "cloud_cover_high",
+            "freezing_level_height",
+            "cape",
+            "lifted_index",
+            "convective_inhibition",
+            "total_column_integrated_water_vapour",
+            "vapour_pressure_deficit",
+            "evapotranspiration"
+        ]
 
     response = requests.get(API_URL, params=params)
     response.raise_for_status()
@@ -227,6 +250,28 @@ def display_weather(location_name, data, output_type):
     pressure = current["pressure_msl"]
     visibility_unit = units['visibility']
 
+    if output_type == "extra":
+        dew_point_2m = current["dew_point_2m"]
+        wind_speed_80m = current["wind_speed_80m"]
+        wind_speed_120m = current["wind_speed_120m"]
+        wind_speed_180m = current["wind_speed_180m"]
+        wind_direction_80m = current["wind_direction_80m"]
+        wind_direction_120m = current["wind_direction_120m"]
+        wind_direction_180m = current["wind_direction_180m"]
+        cloud_cover_low = current["cloud_cover_low"]
+        cloud_cover_mid = current["cloud_cover_mid"]
+        cloud_cover_high = current["cloud_cover_high"]
+        freezing_level_height = current["freezing_level_height"]
+        cape = current["cape"]
+        lifted_index = current["lifted_index"]
+        convective_inhibition = current["convective_inhibition"]
+        total_column_integrated_water_vapour = \
+            current["total_column_integrated_water_vapour"]
+        vapour_pressure_deficit = current["vapour_pressure_deficit"]
+        evapotranspiration = current["evapotranspiration"]
+
+    conditions = get_weather_description(weather_code)
+
     if visibility_unit == "ft" and current["visibility"] >= 5280:
         visibility = round(current["visibility"] / 5280, 2)
         visibility_unit = "miles"
@@ -236,36 +281,90 @@ def display_weather(location_name, data, output_type):
     else:
         visibility = current["visibility"]
 
-    compass = degrees_to_compass(wind_direction)
-    conditions = get_weather_description(weather_code)
+    print()
 
     if output_type == "classic":
-        header = f"Weather for {location_name}, {latitude},{longitude} at {time}"
-        print()
+        header = (
+            f"Weather for {location_name}, {latitude},{longitude} at {time}"
+        )
         print(header)
         print("=" * len(header))
         # Display ASCII art
         print(get_weather_graphic(WEATHER_ASCII_ART, weather_code, is_day))
-    elif output_type == "data":
+    elif output_type == "data" or output_type == "extra":
         # Display unicode characters for weather symbol
         symbol = get_weather_graphic(WEATHER_SYMBOLS, weather_code, is_day)
-        print()
         print(f"Location: {location_name}")
         print(f"Coordinates: {latitude},{longitude}")
         print(f"Local time: {time}")
         print(f"Weather code: {weather_code}")
         print(f"Symbol: {symbol}")
+
     print(f"Temperature: {temperature}{units['temperature_2m']}")
     print(f"Feels like: {feels_like}{units['apparent_temperature']}")
     print(f"Humidity: {humidity}{units['relative_humidity_2m']}")
     print(f"Wind: {wind_speed} {units['wind_speed_10m']}")
     print(f"Gusts: {wind_gusts} {units['wind_gusts_10m']}")
-    print(f"Direction: {compass}")
+
+    if output_type == "extra":
+        print(f"Direction: {wind_direction}{units['wind_direction_10m']}")
+    else:
+        print(f"Direction: {degrees_to_compass(wind_direction)}")
+
     print(f"Conditions: {conditions}")
     print(f"Cloud cover: {cloud_cover}{units['cloud_cover']}")
     print(f"Precipitation: {precipitation} {units['precipitation']}")
     print(f"Pressure: {pressure} {units['pressure_msl']}")
     print(f"Visibility: {visibility} {visibility_unit}")
+
+    if output_type == "extra":
+        print(f"Dewpoint: {dew_point_2m} {units['dew_point_2m']}")
+        print(f"Wind 80m: {wind_speed_80m} {units['wind_speed_80m']}")
+        print(f"Wind 120m: {wind_speed_120m} {units['wind_speed_120m']}")
+        print(f"Wind 180m: {wind_speed_180m} {units['wind_speed_180m']}")
+        print(
+            "Wind direction 80m: "
+            f"{wind_direction_80m} {units['wind_direction_80m']}"
+        )
+        print(
+            "Wind direction 120m: "
+            f"{wind_direction_120m} {units['wind_direction_120m']}"
+        )
+        print(
+            "Wind direction 180m: "
+            f"{wind_direction_180m} {units['wind_direction_180m']}"
+        )
+        print(f"Cloud cover, low: {cloud_cover_low} {units['cloud_cover_low']}")
+        print(
+            "Cloud cover, middle: "
+            f"{cloud_cover_mid} {units['cloud_cover_mid']}"
+        )
+        print(
+            "Cloud cover, high: "
+            f"{cloud_cover_high} {units['cloud_cover_high']}"
+        )
+        print(
+            "Freezing level: "
+            f"{freezing_level_height} {units['freezing_level_height']}"
+        )
+        print(f"CAPE: {cape}{units['cape']}")
+        print(f"Lifted index: {lifted_index} {units['lifted_index']}")
+        print(
+            "Convective inhibition: "
+            f"{convective_inhibition} {units['convective_inhibition']}"
+        )
+        print(
+            f"TCWV: {total_column_integrated_water_vapour} "
+            f"{units['total_column_integrated_water_vapour']}"
+        )
+        print(
+            "Vapour pressure deficit: "
+            f"{vapour_pressure_deficit} {units['vapour_pressure_deficit']}"
+        )
+        print(
+            "Evapotranspiration: "
+            f"{evapotranspiration} {units['vapour_pressure_deficit']}"
+        )
     print()
 
 
@@ -273,7 +372,7 @@ def main(placename, country_code, output_type, units):
     """Main entry point."""
     try:
         location_name, latitude, longitude = geocode(placename, country_code)
-        data = fetch_weather(latitude, longitude, units)
+        data = fetch_weather(latitude, longitude, units, output_type)
         display_weather(location_name, data, output_type)
     except requests.exceptions.RequestException as e:
         print(f"Error geocoding location or fetching weather data: {e}")
@@ -293,7 +392,8 @@ if __name__ == "__main__":
         usage=("%(prog)s [-l <placename>] [-c <country_code>]"
                f"\n{' ' * 22}[-t [celsius|fahrenheit]] "
                "[-p [mm|inch]] [-w [kmh|ms|mph|kn]]"
-               f"\n{' ' * 22}[-o [classic|data]]")
+               f"\n{' ' * 22}[-o [classic|data|extra]]"),
+        formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
         "-l",
@@ -335,11 +435,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-o",
-        help="output style: classic (heading, ascii art and data) \
-                or data (just data)",
+        help=dedent('''\
+            output style: classic (heading, ascii art and data),
+            data (just data) or extra (just data, with extra parameters)'''),
         metavar="",
         required=False,
-        choices=["classic", "data"],
+        choices=["classic", "data", "extra"],
         default="classic"
     )
     try:

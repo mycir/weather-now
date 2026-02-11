@@ -7,7 +7,7 @@ A Python scipt to display [Open-Meteo API](https://open-meteo.com/en/docs) data 
 ```
 usage: weather_now.py [-l <placename>] [-c <country_code>]
                       [-t [celsius|fahrenheit]] [-p [mm|inch]] [-w [kmh|ms|mph|kn]]
-                      [-o [classic|data]]
+                      [-o [classic|data|extra]]
 
 options:
   -h, --help  show this help message and exit
@@ -16,7 +16,8 @@ options:
   -t          temperature unit: celsius or fahrenheit
   -p          precipitation unit: mm or inch
   -w          wind speed unit: kmh, ms, mph or kn
-  -o          output style: classic (heading, ascii art and data) or data (just data)
+  -o          output style: classic (heading, ascii art and data),
+              data (just data) or extra (just data, with extra parameters)
 ```
 
 
@@ -52,7 +53,30 @@ conditions-native
 
 NB Any subsequent change of language will overwrite alterations.
 
-As of Zenity v4.0.1, it does not seem possible to coerce --text and --column for right justification of RTL languages.</br></br>
+## Specialist configs
+
+Replace the weather-now-menu.conf in your script folder with one of these:
+
+| Config name                                               | Additional weather parameters                                      |
+| :-------------------------------------------------------: | :----------------------------------------------------------------: |
+| [severe](configs/severe/weather-now-menu.conf)            | CAPE, convective inhibition, lifted index, TCWV                                  |
+| [agriculture](configs/agriculture/weather-now-menu.conf)  | 'severe' + Vapour pressure deficit, evapotranspiration             |
+| [aviation](configs/aviation/weather-now-menu.conf)        | 'severe' + Wind speed 80m, wind speed 120m, wind speed 180m,       |
+|                                                           | wind direction 80m, wind direction 120m, wind direction 180m,      |                                                 |
+|                                                           | cloud cover low, cloud cover mid, cloud cover high, freezing level |                                                  |
+
+Create your own as required.
+
+**Important! After dropping a specialist config into the script folder, you must run weather-now-menu with your language code  to rebuild weather parameter translations.**
+
+Notes:
+1. Wind directions are displayed in degrees.
+2. Weather is displayed in a scrollable zenity --text-info
+3. RESULTS_FONT in these configs is Noto Sans Bold, change to suit.</br>
+
+## Screenshots
+
+Note: As of Zenity v4.0.1, it does not seem possible to coerce --text and --column for right justification of RTL languages.</br></br>
 
 | Locations                                  | Weather                                |
 | :----------------------------------------: | :------------------------------------: |
