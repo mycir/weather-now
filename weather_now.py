@@ -5,6 +5,7 @@ Fetches and displays current weather data using Open-Meteo API.
 (Bash script 'weather-now-menu' provides a Zenity driven wrapper.)
 """
 
+import sys
 import argparse
 import warnings
 import requests
@@ -15,6 +16,122 @@ warnings.filterwarnings("ignore")
 
 # Open-Meteo API endpoint
 API_URL = "https://api.open-meteo.com/v1/forecast"
+
+WEATHER_PARAMS_BASIC = [
+    "temperature_2m",
+    "apparent_temperature",
+    "relative_humidity_2m",
+    "wind_speed_10m",
+    "wind_gusts_10m",
+    "wind_direction_10m",
+    "weather_code",
+    "cloud_cover",
+    "precipitation",
+    "pressure_msl",
+    "visibility",
+]
+
+WEATHER_PARAMS = [
+    "temperature_2m",
+    "dew_point_2m",
+    "relative_humidity_2m",
+    "precipitation_probability",
+    "apparent_temperature",
+    "precipitation",
+    "rain",
+    "showers",
+    "snowfall",
+    "snow_depth",
+    "weather_code",
+    "pressure_msl",
+    "surface_pressure",
+    "cloud_cover",
+    "cloud_cover_low",
+    "cloud_cover_mid",
+    "cloud_cover_high",
+    "visibility",
+    "evapotranspiration",
+    "et0_fao_evapotranspiration",
+    "vapour_pressure_deficit",
+    "wind_speed_10m",
+    "wind_speed_80m",
+    "wind_speed_120m",
+    "wind_speed_180m",
+    "wind_direction_10m",
+    "wind_direction_80m",
+    "wind_direction_120m",
+    "wind_direction_180m",
+    "wind_gusts_10m",
+    "temperature_80m",
+    "temperature_120m",
+    "temperature_180m",
+    "soil_temperature_0cm",
+    "soil_temperature_6cm",
+    "soil_temperature_18cm",
+    "soil_temperature_54cm",
+    "soil_moisture_0_to_1cm",
+    "soil_moisture_3_to_9cm",
+    "soil_moisture_9_to_27cm",
+    "soil_moisture_27_to_81cm",
+    "uv_index",
+    "uv_index_clear_sky",
+    "is_day",
+    "sunshine_duration",
+    "wet_bulb_temperature_2m",
+    "total_column_integrated_water_vapour",
+    "cape",
+    "lifted_index",
+    "freezing_level_height",
+    "convective_inhibition",
+    "boundary_layer_height",
+    "temperature_1000hPa",
+    "temperature_975hPa",
+    "temperature_950hPa",
+    "temperature_925hPa",
+    "temperature_900hPa",
+    "temperature_850hPa",
+    "temperature_800hPa",
+    "temperature_700hPa",
+    "temperature_600hPa",
+    "temperature_500hPa",
+    "temperature_400hPa",
+    "temperature_300hPa",
+    "temperature_250hPa",
+    "temperature_200hPa",
+    "temperature_150hPa",
+    "temperature_100hPa",
+    "temperature_70hPa",
+    "temperature_50hPa",
+    "temperature_30hPa",
+    "shortwave_radiation",
+    "direct_radiation",
+    "diffuse_radiation",
+    "direct_normal_irradiance",
+    "global_tilted_irradiance",
+    "terrestrial_radiation",
+    "shortwave_radiation_instant",
+    "direct_radiation_instant",
+    "diffuse_radiation_instant",
+    "direct_normal_irradiance_instant",
+    "global_tilted_irradiance_instant",
+    "terrestrial_radiation_instant",
+    "lightning_potential",
+    "snowfall_height",
+]
+
+FRIENDLY_NAMES = {
+    "time": "local_time",
+    "temperature_2m": "temperature",
+    "relative_humidity_2m": "humidity",
+    "apparent_temperature": "feels_like",
+    "wind_speed_10m": "wind",
+    "wind_gusts_10m": "gusts",
+    "wind_direction_10m": "direction",
+    "weather_code": "conditions",
+    "pressure_msl": "pressure",
+    "cape": "CAPE",
+    "total_column_integrated_water_vapour": "TCWV"
+}
 
 # WMO Weather Code descriptions
 WEATHER_CODES = {
@@ -170,7 +287,6 @@ def get_weather_category(code):
 def get_weather_graphic(graphic_type, code, is_day):
     """Get character representation for a weather code."""
     category = get_weather_category(code)
-    # if (not is_day) and category == "clear" or category == "partly_cloudy":
     if category == "clear" or category == "partly_cloudy" and not is_day:
         suffix = "_night"
     else:
@@ -178,211 +294,99 @@ def get_weather_graphic(graphic_type, code, is_day):
     return graphic_type.get(f"{category}{suffix}", graphic_type["cloudy"])
 
 
-def fetch_weather(latitude, longitude, units, output_type):
+def fetch_weather(latitude, longitude, params_extra, units):
     """Fetch current weather data from Open-Meteo API."""
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "temperature_unit": units["temperature"],
-        "precipitation_unit": units["precipitation"],
-        "wind_speed_unit": units["wind"],
-        "current": [
-            "temperature_2m",
-            "apparent_temperature",
-            "relative_humidity_2m",
-            "wind_speed_10m",
-            "wind_gusts_10m",
-            "wind_direction_10m",
-            "weather_code",
-            "cloud_cover",
-            "precipitation",
-            "pressure_msl",
-            "visibility",
-            "is_day"
-        ],
-        "timezone": "auto"
-    }
+    params = f"latitude={latitude}&longitude={longitude}" + \
+        "&timezone=auto&current=is_day" + \
+        "&temperature_unit=" + units["temperature"] + \
+        "&wind_speed_unit=" + units["wind"] + \
+        "&precipitation_unit=" + units["precipitation"] + "&"
 
-    if output_type == "extra":
-        params["current"] += [
-            "dew_point_2m",
-            "wind_speed_80m",
-            "wind_speed_120m",
-            "wind_speed_180m",
-            "wind_direction_80m",
-            "wind_direction_120m",
-            "wind_direction_180m",
-            "cloud_cover_low",
-            "cloud_cover_mid",
-            "cloud_cover_high",
-            "freezing_level_height",
-            "cape",
-            "lifted_index",
-            "convective_inhibition",
-            "total_column_integrated_water_vapour",
-            "vapour_pressure_deficit",
-            "evapotranspiration"
-        ]
+    for param in params_extra:
+        params += f"&current={param}"
 
     response = requests.get(API_URL, params=params)
     response.raise_for_status()
     return response.json()
 
 
-def display_weather(location_name, data, output_type):
+def display_weather(location_name, data, wind_in_degrees, output_type):
     """Format and display weather information."""
     current = data["current"]
     units = data["current_units"]
-
-    latitude = data["latitude"]
-    longitude = data["longitude"]
-    time = current["time"]
-    is_day = current["is_day"]
-    temperature = current["temperature_2m"]
-    feels_like = current["apparent_temperature"]
-    humidity = current["relative_humidity_2m"]
-    wind_speed = current["wind_speed_10m"]
-    wind_gusts = current["wind_gusts_10m"]
-    wind_direction = current["wind_direction_10m"]
-    weather_code = current["weather_code"]
-    cloud_cover = current["cloud_cover"]
-    precipitation = current["precipitation"]
-    pressure = current["pressure_msl"]
-    visibility_unit = units['visibility']
-
-    if output_type == "extra":
-        dew_point_2m = current["dew_point_2m"]
-        wind_speed_80m = current["wind_speed_80m"]
-        wind_speed_120m = current["wind_speed_120m"]
-        wind_speed_180m = current["wind_speed_180m"]
-        wind_direction_80m = current["wind_direction_80m"]
-        wind_direction_120m = current["wind_direction_120m"]
-        wind_direction_180m = current["wind_direction_180m"]
-        cloud_cover_low = current["cloud_cover_low"]
-        cloud_cover_mid = current["cloud_cover_mid"]
-        cloud_cover_high = current["cloud_cover_high"]
-        freezing_level_height = current["freezing_level_height"]
-        cape = current["cape"]
-        lifted_index = current["lifted_index"]
-        convective_inhibition = current["convective_inhibition"]
-        total_column_integrated_water_vapour = \
-            current["total_column_integrated_water_vapour"]
-        vapour_pressure_deficit = current["vapour_pressure_deficit"]
-        evapotranspiration = current["evapotranspiration"]
-
-    conditions = get_weather_description(weather_code)
-
-    if visibility_unit == "ft" and current["visibility"] >= 5280:
-        visibility = round(current["visibility"] / 5280, 2)
-        visibility_unit = "miles"
-    elif current["visibility"] >= 1000:
-        visibility = round(current["visibility"] / 1000, 2)
-        visibility_unit = "km"
+    lat, lon = (data["latitude"], data["longitude"])
+    units["time"] = ""
+    if not wind_in_degrees:
+        current["wind_direction_10m"] = \
+            degrees_to_compass(current["wind_direction_10m"])
+        units["wind_direction_10m"] = ""
+    code = current["weather_code"]
+    if output_type == "data-alt":
+        current["weather_code"] = \
+            f"{code}[{get_weather_description(code)}]"
     else:
-        visibility = current["visibility"]
-
-    print()
-
+        current["weather_code"] = get_weather_description(code)
+    units["weather_code"] = ""
     if output_type == "classic":
         header = (
-            f"Weather for {location_name}, {latitude},{longitude} at {time}"
+            f"Weather for {location_name}, {lat}, {lon} at {current['time']}"
         )
+        del current["time"]
         print(header)
         print("=" * len(header))
         # Display ASCII art
-        print(get_weather_graphic(WEATHER_ASCII_ART, weather_code, is_day))
-    elif output_type == "data" or output_type == "extra":
-        # Display unicode characters for weather symbol
-        symbol = get_weather_graphic(WEATHER_SYMBOLS, weather_code, is_day)
-        print(f"Location: {location_name}")
-        print(f"Coordinates: {latitude},{longitude}")
-        print(f"Local time: {time}")
-        print(f"Weather code: {weather_code}")
-        print(f"Symbol: {symbol}")
-
-    print(f"Temperature: {temperature}{units['temperature_2m']}")
-    print(f"Feels like: {feels_like}{units['apparent_temperature']}")
-    print(f"Humidity: {humidity}{units['relative_humidity_2m']}")
-    print(f"Wind: {wind_speed} {units['wind_speed_10m']}")
-    print(f"Gusts: {wind_gusts} {units['wind_gusts_10m']}")
-
-    if output_type == "extra":
-        print(f"Direction: {wind_direction}{units['wind_direction_10m']}")
+        print(get_weather_graphic(
+            WEATHER_ASCII_ART, current["weather_code"], current["is_day"]))
     else:
-        print(f"Direction: {degrees_to_compass(wind_direction)}")
+        symbol = get_weather_graphic(
+                    WEATHER_SYMBOLS,
+                    current["weather_code"],
+                    current["is_day"])
+    if units["visibility"] == "ft" and current["visibility"] >= 5280:
+        current["visibility"] = round(current["visibility"] / 5280, 2)
+        units["visibility"] = "miles"
+    elif current["visibility"] >= 1000:
+        current["visibility"] = round(current["visibility"] / 1000, 2)
+        units["visibility"] = "km"
+    del current["interval"]
+    del current["is_day"]
+    print(f"Coordinates: {lat},{lon}")
 
-    print(f"Conditions: {conditions}")
-    print(f"Cloud cover: {cloud_cover}{units['cloud_cover']}")
-    print(f"Precipitation: {precipitation} {units['precipitation']}")
-    print(f"Pressure: {pressure} {units['pressure_msl']}")
-    print(f"Visibility: {visibility} {visibility_unit}")
+    for param in current:
+        try:
+            label = FRIENDLY_NAMES[param]
+        except (KeyError):
+            label = param
+        value = current[param]
+        unit = units[param]
+        if value is None:
+            value = "n/a"
+            unit = ""
+        if not label.isupper():
+            label = label.replace('_', ' ').capitalize()
+        print(f"{label}: {value}{unit}")
 
-    if output_type == "extra":
-        print(f"Dewpoint: {dew_point_2m} {units['dew_point_2m']}")
-        print(f"Wind 80m: {wind_speed_80m} {units['wind_speed_80m']}")
-        print(f"Wind 120m: {wind_speed_120m} {units['wind_speed_120m']}")
-        print(f"Wind 180m: {wind_speed_180m} {units['wind_speed_180m']}")
-        print(
-            "Wind direction 80m: "
-            f"{wind_direction_80m} {units['wind_direction_80m']}"
-        )
-        print(
-            "Wind direction 120m: "
-            f"{wind_direction_120m} {units['wind_direction_120m']}"
-        )
-        print(
-            "Wind direction 180m: "
-            f"{wind_direction_180m} {units['wind_direction_180m']}"
-        )
-        print(f"Cloud cover, low: {cloud_cover_low} {units['cloud_cover_low']}")
-        print(
-            "Cloud cover, middle: "
-            f"{cloud_cover_mid} {units['cloud_cover_mid']}"
-        )
-        print(
-            "Cloud cover, high: "
-            f"{cloud_cover_high} {units['cloud_cover_high']}"
-        )
-        print(
-            "Freezing level: "
-            f"{freezing_level_height} {units['freezing_level_height']}"
-        )
-        print(f"CAPE: {cape}{units['cape']}")
-        print(f"Lifted index: {lifted_index} {units['lifted_index']}")
-        print(
-            "Convective inhibition: "
-            f"{convective_inhibition} {units['convective_inhibition']}"
-        )
-        print(
-            f"TCWV: {total_column_integrated_water_vapour} "
-            f"{units['total_column_integrated_water_vapour']}"
-        )
-        print(
-            "Vapour pressure deficit: "
-            f"{vapour_pressure_deficit} {units['vapour_pressure_deficit']}"
-        )
-        print(
-            "Evapotranspiration: "
-            f"{evapotranspiration} {units['vapour_pressure_deficit']}"
-        )
-    print()
+    if output_type != "classic":
+        print(f"Weather symbol: {symbol}")
 
 
-def main(placename, country_code, output_type, units):
+def main(placename, country_code, output_type, units, wind_degrees, stdin):
     """Main entry point."""
     try:
         location_name, latitude, longitude = geocode(placename, country_code)
-        data = fetch_weather(latitude, longitude, units, output_type)
-        display_weather(location_name, data, output_type)
+        params = WEATHER_PARAMS_BASIC
+        if stdin:
+            params += [line.strip() for line in sys.stdin]
+        data = fetch_weather(latitude, longitude, params, units)
+        display_weather(location_name, data, wind_degrees, output_type)
     except requests.exceptions.RequestException as e:
-        print(f"Error geocoding location or fetching weather data: {e}")
-        return 1
-    except (RuntimeError) as e:
-        print(e)
+        print(f"Error fetching weather data: {e}")
         return 1
     except (KeyError, TypeError) as e:
         print(f"Error parsing weather data: {e}")
         return 1
+    except RuntimeError as e:
+        print(e)
     return 0
 
 
@@ -392,7 +396,9 @@ if __name__ == "__main__":
         usage=("%(prog)s [-l <placename>] [-c <country_code>]"
                f"\n{' ' * 22}[-t [celsius|fahrenheit]] "
                "[-p [mm|inch]] [-w [kmh|ms|mph|kn]]"
-               f"\n{' ' * 22}[-o [classic|data|extra]]"),
+               f"\n{' ' * 22}[-d] [-o [classic|data|data-alt]]"
+               "\n\n       When - is appended, read additional "
+               "weather parameters from standard input."),
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
@@ -434,17 +440,33 @@ if __name__ == "__main__":
         default="kmh"
     )
     parser.add_argument(
+        "-d",
+        help="wind direction: show in degrees",
+        action='store_true'
+    )
+    parser.add_argument(
         "-o",
         help=dedent('''\
             output style: classic (heading, ascii art and data),
-            data (just data) or extra (just data, with extra parameters)'''),
+            data (just data) or data-alt (conditions code and description)'''),
         metavar="",
         required=False,
-        choices=["classic", "data", "extra"],
+        choices=["classic", "data", "data-alt"],
         default="classic"
     )
     try:
         args, unknown = parser.parse_known_args()
+        stdin = False
+        index, index_last = 0, len(unknown) - 1
+        for u in unknown:
+            if u == '-':
+                if index == index_last:
+                    del unknown[index]
+                    stdin = True
+                    break
+                else:
+                    parser.error("improper use of '-'")
+            index += 1
         if unknown:
             parser.error(f"unrecognised argument(s): {' '.join(unknown)}")
     except SystemExit as err:
@@ -452,10 +474,17 @@ if __name__ == "__main__":
         if err.args[0]:
             parser.print_help()
         raise
-    args = {k: v.lstrip() for k, v in vars(args).items()}
+    args = {
+        k: (v.lstrip() if isinstance(v, str) else v)
+        for k, v in vars(args).items()
+    }
+
     units = {
         'temperature': args["t"],
         'precipitation': args["p"],
         'wind': args["w"]
     }
-    exit(main(args["l"], args["c"], args["o"], units))
+
+    wind_degrees = args["d"]
+    args_count = len(sys.argv)
+    exit(main(args["l"], args["c"], args["o"], units, wind_degrees, stdin))

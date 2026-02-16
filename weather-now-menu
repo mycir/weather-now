@@ -57,21 +57,21 @@ check_lang() {
     kill -s TERM $TOP_PID
 }
 
-strip_prefixes() {
-    [[ "$LANGUAGE_DIRECTION" == "RTL" ]] && \
-        pattern=".*\p{L}" || pattern="\p{L}.*"
-    printf '%s\n' "$1" | grep -oP "${pattern}"
-}
+strip_prefixes() (
+    while read -r line; do
+        echo "${line#*: }"
+    done <<< "$1"   
+)
 
 translate_locations() {
-    local locations=$1'[@]'
+    local -n locations=$1
     local lang=$2
     local output_file=$3
     local trans_input
     local trans_output
     local location
 
-    for location in "${!locations}"; do
+    for location in "${locations[@]}"; do
         trans_input+="${location%:*}${NL}"
     done
 
@@ -85,8 +85,8 @@ translate_locations() {
 }
 
 translate_labels() {
-    local labels=$1'[@]'
-    local label_ids=$2'[@]'
+    local -n labels=$1
+    local -n label_ids=$2
     local lang=$3
     local output_file=$4
     local prefix=$5
@@ -94,32 +94,29 @@ translate_labels() {
     local trans_output
     local translated_lines
 
-    for label in "${!labels}"; do
+    for label in "${labels[@]}"; do
         trans_input+="$prefix$label${NL}"
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" | \
         trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
-
     if [[ -n "$prefix" ]]; then
         translated_lines="$(strip_prefixes "$trans_output")"
     else
         translated_lines="$trans_output"
     fi
-
     mapfile -t translations <<< "$translated_lines"
 
-    local i=0
-    for id in "${!label_ids}"; do
-        translation="${translations[$i]}"
-        echo "$id=\"${translation#"${translation%%[![:space:]]*}"}\"" \
+    for (( i=0; i < ${#label_ids[@]}; ++i )); do
+        trans="${translations[i]}"
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && trans="${trans^}"
+        echo "${label_ids[i]}=\"${trans#"${trans%%[![:space:]]*}"}\"" \
             >> "$output_file"
-        (( i=++i ))
     done
 }
 
 translate_codes() {
-    local codes=$1'[@]'
+    local -n codes=$1
     local lang=$2
     local output_file=$3
     local trans_input
@@ -128,10 +125,9 @@ translate_codes() {
     local code
     local i=0
 
-    for code in "${!codes}"; do
+    for code in "${codes[@]}"; do
         [[ $code == "" ]] && code="unknown"
-        trans_input+="$i: $code${NL}"
-        (( ++i ))
+        trans_input+="Weather: $code${NL}"
     done
 
     trans_output="$(exec_command "echo -e \"$trans_input\" \
@@ -145,6 +141,48 @@ translate_codes() {
     echo ")" >> "$output_file"
 }
 
+translate_extra_parameters() {
+    local -n params=$1
+    local lang=$2
+    local output_file=$3
+    local prefix=$4
+    local trans_input
+    local trans_output
+    local translated_lines
+
+    for p in "${params[@]}" ; do
+        p="${p//_/ }"
+        p="${p^}"
+        trans_input+="$prefix$p${NL}"
+    done
+
+    trans_output="$(exec_command "echo -e \"$trans_input\" \
+        | trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
+
+    if [[ -n "$prefix" ]]; then
+        translated_lines="$(strip_prefixes "$trans_output")"
+    else
+        translated_lines="$trans_output"
+    fi
+
+    local i=0
+    while read -r line; do
+        case "${params[i]}" in
+            "cape" )
+                k="CAPE"
+                line=$k ;;
+            "total_column_integrated_water_vapour" )
+                k="TCWV"
+                line=$k ;;
+            *)
+                typeset -u k="${params[i]}"
+        esac
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && line="${line^}"
+        echo "$k=\"${line}\"" >> "$output_file"
+        (( ++i ))
+    done <<< "$translated_lines"
+}
+
 label_weather() {
     local weather
 
@@ -156,13 +194,14 @@ label_weather() {
         fi
 
         typeset -u param_uppercase="$parameter"
-        label_id="${param_uppercase//[ ,]/_}"
+        label_id="${param_uppercase//[ ]/_}"
         label_value=${!label_id}
 
         if [ -n "${!label_id+x}" ] ; then
-            [[ "$label_value" == "*" ]] && label_value="$parameter"
+            # shellcheck disable=SC2199
+            [[ "${EXCLUDED[@]}" =~ $label_value ]] && label_value="$parameter"
             if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
-                weather+="${RLM}$label_value: ${LRM}$value${LRM}${NL}${RLM}"
+                weather+="${RLM}$label_value: ${RLM}${LRM}$value${LRM}${NL}"
             else
                 weather+="$label_value: $value${NL}"
             fi
@@ -215,9 +254,12 @@ if [[ -n "$1"  ]] ; then
         # translate_labels <labels> <label ids> <lang> <output file> [prefix]
         # where prefix is used to influence translate-shell results
         translate_locations LOCATIONS "$1" "$locations_native_file"
-        translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "1: "
+        translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "Command: "
         translate_labels PARAMETER_LABELS PARAMETER_IDS "$1" "$labels_native_file"
         translate_codes CONDITIONS "$1" "$conditions_native_file"
+        if [ -n "${EXTRA_PARAMS+x}" ] ; then
+            translate_extra_parameters EXTRA_PARAMS "$1" "$labels_native_file" "Weather: "
+        fi
         echo 100  >&"${progress_dlg[1]}"
     fi
 fi
@@ -313,42 +355,35 @@ while true; do
     fi
 
     if [[ "$CONFIG_NAME" == "simple" ]] ; then
-        output_type="data"
+        output_type="simple"
     else
-        output_type="extra"
+        output_type="data-alt"
     fi
+
+    params_extra="${EXTRA_PARAMS[*]}"
+    params_extra=${params_extra// /${NL}}
 
     while read -r line; do
         k="${line%%:*}"
         v=${line#*: }
         case $k in
-        "Location" )
-            continue ;;
-        "Weather code" )
-            [[ "$LANGUAGE" != "en" ]] && code=$v ;;
-        "Symbol" )
-            symbol=$v ;;
         "Conditions")
+            code=${v%[*}
+            s=${v#*[};description=${s%*]}
             if [[ "$LANGUAGE" == "en" ]] ; then
-                results+="$line${NL}"
+                results+="$k: $description${NL}"
             else
                 results+="$k: ${CONDITIONS_NATIVE["$code"]}${NL}"
             fi ;;
+        "Weather symbol" )
+            symbol=$v ;;
         *)
-            if [[ "$LANGUAGE" == "en" ]] ; then 
-                typeset -u k_uppercase="$k"
-                label_id="${k_uppercase//[ ,]/_}"
-                if [[ ! " ${PARAMETER_IDS[*]} " =~ \
-                    [[:space:]]${label_id}[[:space:]] ]]; then
-                    continue
-                fi
-            fi
             results+="$line${NL}" ;;
         esac
-    done < <(exec_command "\"$script_dir/weather_now.py\" \
+    done < <(exec_command "echo \"$params_extra\" | \"$script_dir/weather_now.py\" \
         -l \"$placename\" -c \"$country_code\" \
         -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
-        -w \"$WIND_SPEED_UNIT\" -o \"$output_type\"")
+        -w \"$WIND_SPEED_UNIT\" $WIND_IN_DEGREES -o \"data-alt\" -")
 
     if [[ "$LANGUAGE" == "en" ]] ; then
         weather="$results"
@@ -356,7 +391,7 @@ while true; do
         weather=$(label_weather "$(printf "%b" "$results")")
     fi
 
-    if [[ "$output_type" == "data" ]] ; then
+    if [[ "$output_type" == "simple" ]] ; then
         zenity --forms --title="$TITLE${NL}$place${NL}${NL}$symbol" \
             --text="$weather${PADDING}" --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
             --ok-label="${LRM}$RESULTS_BTN_OK"

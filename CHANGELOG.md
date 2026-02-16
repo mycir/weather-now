@@ -1,5 +1,10 @@
 # Changelog
 
+## Feb. 2026 iii.
+
+- Read optional weather parameters from stdin.
+- Changes to output types.
+
 ## Feb. 2026 ii.
 
 - Additional weather parameters for special interests.
