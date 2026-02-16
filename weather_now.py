@@ -287,7 +287,7 @@ def get_weather_category(code):
 def get_weather_graphic(graphic_type, code, is_day):
     """Get character representation for a weather code."""
     category = get_weather_category(code)
-    if category == "clear" or category == "partly_cloudy" and not is_day:
+    if (category == "clear" or category == "partly_cloudy") and not is_day:
         suffix = "_night"
     else:
         suffix = ""
@@ -320,12 +320,12 @@ def display_weather(location_name, data, wind_in_degrees, output_type):
         current["wind_direction_10m"] = \
             degrees_to_compass(current["wind_direction_10m"])
         units["wind_direction_10m"] = ""
-    code = current["weather_code"]
+    weather_code = current["weather_code"]
     if output_type == "data-alt":
         current["weather_code"] = \
-            f"{code}[{get_weather_description(code)}]"
+            f"{weather_code}[{get_weather_description(weather_code)}]"
     else:
-        current["weather_code"] = get_weather_description(code)
+        current["weather_code"] = get_weather_description(weather_code)
     units["weather_code"] = ""
     if output_type == "classic":
         header = (
@@ -336,11 +336,11 @@ def display_weather(location_name, data, wind_in_degrees, output_type):
         print("=" * len(header))
         # Display ASCII art
         print(get_weather_graphic(
-            WEATHER_ASCII_ART, current["weather_code"], current["is_day"]))
+            WEATHER_ASCII_ART, weather_code, current["is_day"]))
     else:
         symbol = get_weather_graphic(
                     WEATHER_SYMBOLS,
-                    current["weather_code"],
+                    weather_code,
                     current["is_day"])
     if units["visibility"] == "ft" and current["visibility"] >= 5280:
         current["visibility"] = round(current["visibility"] / 5280, 2)
