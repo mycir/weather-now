@@ -80,7 +80,7 @@ Replace the weather-now-menu.conf in your script folder with one of these:
 |                                                           | soil_temperature_54cm                                              |
 | [alpine](configs/alpine/weather-now-menu.conf)            | snowfall, snow_depth, snowfall_height                              |
 
-Create your own as required.
+Create your own as required. (EXTRA_PARAMS can be any from weather_now.py WEATHER_PARAMS)
 
 **Important! After dropping a specialist config into the script folder, you must run weather-now-menu with your language code  to rebuild weather parameter translations.**
 
