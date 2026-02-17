@@ -4,6 +4,7 @@
 
 NL=$'\n'
 TAB=$'\t'
+WARNING_ICON=$'\u26A0'
 # unicode justification markers
 LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
 RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
@@ -15,13 +16,14 @@ trap "exit 1" TERM
 export TOP_PID=$$
 
 error_exit() {
-    cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1"
+    cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1${NL}${NL}"
     output_info="$TEXT_OUTPUT:${NL}${NL}$3"
-    if ! zenity --question --title="$TITLE - $TEXT_ERROR" \
-        --no-markup --text="$cmd_info${NL}${NL}$output_info" \
+
+    if ! zenity --text-info --title="$TITLE${NL}$WARNING_ICON $TEXT_ERROR" \
+        --width=600 --height=500 \
         --cancel-label="${LRM}$ERROR_BTN_RETRY" \
         --ok-label="${LRM}$ERROR_BTN_EXIT" \
-        --icon=data-warning 2> /dev/null ; then
+        2> /dev/null <<< "$cmd_info$output_info" ; then
         echo 1
     else
         kill -s TERM $TOP_PID
@@ -59,9 +61,16 @@ check_lang() {
 
 strip_prefixes() (
     while read -r line; do
-        echo "${line#*: }"
+        echo "${line#*:[ \u00ao]}"
     done <<< "$1"   
 )
+
+translate() {
+    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 :$lang \"$1\""
+    trans_output="$(exec_command "$cmd")"
+    trans_output=${trans_output%.}
+    echo "${trans_output//./${NL}}"
+}
 
 translate_locations() {
     local -n locations=$1
@@ -72,11 +81,10 @@ translate_locations() {
     local location
 
     for location in "${locations[@]}"; do
-        trans_input+="${location%:*}${NL}"
+        trans_input+="${location%:*}. "
     done
 
-    trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
+    trans_output=$(translate "$trans_input")
     echo "LOCATIONS_NATIVE=(" > "$output_file"
     while read -r line; do
         echo "${TAB}\"${line}\"" >> "$output_file"
@@ -95,11 +103,10 @@ translate_labels() {
     local translated_lines
 
     for label in "${labels[@]}"; do
-        trans_input+="$prefix$label${NL}"
+        trans_input+="$prefix$label. "
     done
 
-    trans_output="$(exec_command "echo -e \"$trans_input\" | \
-        trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
+    trans_output=$(translate "$trans_input")
     if [[ -n "$prefix" ]]; then
         translated_lines="$(strip_prefixes "$trans_output")"
     else
@@ -127,11 +134,10 @@ translate_codes() {
 
     for code in "${codes[@]}"; do
         [[ $code == "" ]] && code="unknown"
-        trans_input+="Weather: $code${NL}"
+        trans_input+="Weather: $code. "
     done
 
-    trans_output="$(exec_command "echo -e \"$trans_input\" \
-        | trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
+    trans_output=$(translate "$trans_input")
     translated_lines="$(strip_prefixes "$trans_output")"
 
     echo "CONDITIONS_NATIVE=(" > "$output_file"
@@ -153,11 +159,10 @@ translate_extra_parameters() {
     for p in "${params[@]}" ; do
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="$prefix$p${NL}"
+        trans_input+="$prefix$p. "
     done
 
-    trans_output="$(exec_command "echo -e \"$trans_input\" \
-        | trans -b -e \"$ENGINE\" -4 -no-warn en:$lang")"
+    trans_output=$(translate "$trans_input")
 
     if [[ -n "$prefix" ]]; then
         translated_lines="$(strip_prefixes "$trans_output")"
