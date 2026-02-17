@@ -8,6 +8,10 @@ WARNING_ICON=$'\u26A0'
 # unicode justification markers
 LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
 RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
+# problem chars in translations
+NO_BREAK_SPACE=$'\u00A0'
+IDEOGRAPHIC_FULL_STOP=$'\u3002'
+FULL_WIDTH_COLON=$'\uFF1A'
 # default language
 LANGUAGE="en"
 LANGUAGE_DIRECTION="LTR"
@@ -61,15 +65,17 @@ check_lang() {
 
 strip_prefixes() (
     while read -r line; do
-        echo "${line#*:[ \u00ao]}"
-    done <<< "$1"   
+        [[ "$line" =~ (warning|mismatch) ]] && continue
+        line="${line#*[:${FULL_WIDTH_COLON}]}"
+        echo "${line##[ ${NO_BREAK_SPACE}]}"
+    done <<< "$1"
 )
 
 translate() {
     cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 :$lang \"$1\""
     trans_output="$(exec_command "$cmd")"
     trans_output=${trans_output%.}
-    echo "${trans_output//./${NL}}"
+    echo "${trans_output//[.${IDEOGRAPHIC_FULL_STOP}]/${NL}}"
 }
 
 translate_locations() {
