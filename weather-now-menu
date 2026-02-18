@@ -11,6 +11,7 @@ RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
 # problem chars in translations
 NO_BREAK_SPACE=$'\u00A0'
 IDEOGRAPHIC_FULL_STOP=$'\u3002'
+DEVANAGARI_DANDA=$'\u0964'
 FULL_WIDTH_COLON=$'\uFF1A'
 # default language
 LANGUAGE="en"
@@ -75,7 +76,7 @@ translate() {
     cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$1\""
     trans_output="$(exec_command "$cmd")"
     trans_output=${trans_output%.}
-    echo "${trans_output//[.${IDEOGRAPHIC_FULL_STOP}]/${NL}}"
+    echo "${trans_output//[.${IDEOGRAPHIC_FULL_STOP}${DEVANAGARI_DANDA}]/${NL}}"
 }
 
 translate_locations() {
