@@ -23,10 +23,10 @@ error_exit() {
     cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1${NL}${NL}"
     output_info="$TEXT_OUTPUT:${NL}${NL}$3"
 
-    if ! zenity --text-info --title="$TITLE${NL}$WARNING_ICON $TEXT_ERROR" \
+    if zenity --text-info --title="$TITLE${NL}$WARNING_ICON $TEXT_ERROR" \
         --width=600 --height=500 \
-        --cancel-label="${LRM}$ERROR_BTN_RETRY" \
-        --ok-label="${LRM}$ERROR_BTN_EXIT" \
+        --cancel-label="${LRM}$ERROR_BTN_EXIT" \
+        --ok-label="${LRM}$ERROR_BTN_RETRY" \
         2> /dev/null <<< "$cmd_info$output_info" ; then
         echo 1
     else
@@ -72,7 +72,7 @@ strip_prefixes() (
 )
 
 translate() {
-    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 :$lang \"$1\""
+    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$1\""
     trans_output="$(exec_command "$cmd")"
     trans_output=${trans_output%.}
     echo "${trans_output//[.${IDEOGRAPHIC_FULL_STOP}]/${NL}}"
