@@ -4,15 +4,38 @@
 
 NL=$'\n'
 TAB=$'\t'
-WARNING_ICON=$'\u26A0'
 # unicode justification markers
 LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
 RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
-# problem chars in translations
+WARNING_ICON=$'\u26A0'
 NO_BREAK_SPACE=$'\u00A0'
-IDEOGRAPHIC_FULL_STOP=$'\u3002'
-DEVANAGARI_DANDA=$'\u0964'
-FULL_WIDTH_COLON=$'\uFF1A'
+FULLWIDTH_LEFT_PARENTHESIS=$'\uFF08'
+FULLWIDTH_RIGHT_PARENTHESIS=$'\uFF09'
+DOUBLE_QUOTE=$'\u0022'
+
+COLONS=(
+    ':'        # COLON
+    # potential colon substitutes
+    $'\u003A'  # ASCII_COLON
+    $'\uFF1A'  # FULL_WIDTH_COLON
+    $'\uFE13'  # VERTICAL_COLON
+    $'\uFE55'  # SMALL_COLON
+    $'\u1361'  # ETHIOPIC_WORDSPACE
+    $'\u0589'  # ARMENIAN_FULL_STOP
+    $'\u05C3'  # HEBREW_SOF_PASUQ
+    $'\uA789'  # MODIFIER_LETTER_COLON
+    $'\u2236'  # RATIO_COLON
+    $'\u205A'  # TWO_DOT_PUNCTUATION
+)
+
+STOPS=(
+    '.'
+    $'\u3002'  # IDEOGRAPHIC_FULL_STOP
+    $'\u0964'  # DEVANAGARI_DANDA
+    $'\u1362'  # ETHIOPIC_FULL_STOP
+)
+
+
 # default language
 LANGUAGE="en"
 LANGUAGE_DIRECTION="LTR"
@@ -53,21 +76,23 @@ exec_command() {
 
 check_lang() {
     codes=$(trans --list-codes)
-
     for code in $codes ; do
         [[ "$code" == "$1" ]] && return
     done
-
     err_text="Invalid language code: $1"
-    >&2 echo "$err_text"
-    zenity --error --title="$TITLE - Error" --text="$err_text"
-    kill -s TERM $TOP_PID
+    if ! zenity --question --title="$TITLE - Error" \
+        --text="$err_text${NL}${NL}Do you wish to continue?" \
+        --width=300 --icon="data-warning" --no-markup ; then
+        kill -s TERM $TOP_PID
+    fi
 }
 
 strip_prefixes() (
+    colons=${COLONS[*]}
+    colons=${colons// /}
     while read -r line; do
-        [[ "$line" =~ (warning|mismatch) ]] && continue
-        line="${line#*[:${FULL_WIDTH_COLON}]}"
+        [[ "$line" =~ (warning|mismatch|^$) ]] && continue
+        line="${line#*[$colons]}"
         echo "${line##[ ${NO_BREAK_SPACE}]}"
     done <<< "$1"
 )
@@ -75,8 +100,13 @@ strip_prefixes() (
 translate() {
     cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$1\""
     trans_output="$(exec_command "$cmd")"
-    trans_output=${trans_output%.}
-    echo "${trans_output//[.${IDEOGRAPHIC_FULL_STOP}${DEVANAGARI_DANDA}]/${NL}}"
+    stops=${STOPS[*]}
+    stops=${stops// /}
+    # double quotes noticed in hebrew output    
+    trans_output="${trans_output//[${stops}${DOUBLE_QUOTE}]/}"
+    trans_output="${trans_output//[(${FULLWIDTH_LEFT_PARENTHESIS}]/}"
+    trans_output="${trans_output//[)${FULLWIDTH_RIGHT_PARENTHESIS}]/$'\n'}"
+    echo "$trans_output"
 }
 
 translate_locations() {
@@ -88,12 +118,13 @@ translate_locations() {
     local location
 
     for location in "${locations[@]}"; do
-        trans_input+="${location%:*}. "
+        trans_input+="(${location%:*}). "
     done
 
     trans_output=$(translate "$trans_input")
     echo "LOCATIONS_NATIVE=(" > "$output_file"
     while read -r line; do
+        [[ "$line" == "" ]] && continue
         echo "${TAB}\"${line}\"" >> "$output_file"
     done < <(echo "$trans_output")
     echo ")" >> "$output_file"
@@ -110,7 +141,7 @@ translate_labels() {
     local translated_lines
 
     for label in "${labels[@]}"; do
-        trans_input+="$prefix$label. "
+        trans_input+="($prefix$label). "
     done
 
     trans_output=$(translate "$trans_input")
@@ -133,20 +164,30 @@ translate_codes() {
     local -n codes=$1
     local lang=$2
     local output_file=$3
+    local prefix=$4
     local trans_input
     local trans_output
     local translated_lines
     local code
     local i=0
 
-    for code in "${codes[@]}"; do
-        [[ $code == "" ]] && code="unknown"
-        trans_input+="Weather: $code. "
+    # big chunks can break trans
+    for (( i=0; i < "${#codes[@]}"; ++i )); do
+        code="${codes[$i]}"
+        [[ $code == "" ]] && code="*******"
+        if (( i < 33 )) ; then
+            trans_input1+="($prefix$code). "
+        elif (( i < 66 )) ; then
+            trans_input2+="($prefix$code). "
+        else
+            trans_input3+="($prefix$code). "
+        fi
     done
 
-    trans_output=$(translate "$trans_input")
+    trans_output="$(translate "$trans_input1")${NL}"
+    trans_output+="$(translate "$trans_input2")${NL}"
+    trans_output+="$(translate "$trans_input3")"
     translated_lines="$(strip_prefixes "$trans_output")"
-
     echo "CONDITIONS_NATIVE=(" > "$output_file"
     while read -r line; do
         echo "${TAB}\"${line}\"" >> "$output_file"
@@ -166,7 +207,7 @@ translate_extra_parameters() {
     for p in "${params[@]}" ; do
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="$prefix$p. "
+        trans_input+="($prefix$p). "
     done
 
     trans_output=$(translate "$trans_input")
@@ -267,10 +308,12 @@ if [[ -n "$1"  ]] ; then
         # where prefix is used to influence translate-shell results
         translate_locations LOCATIONS "$1" "$locations_native_file"
         translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "Command: "
-        translate_labels PARAMETER_LABELS PARAMETER_IDS "$1" "$labels_native_file"
-        translate_codes CONDITIONS "$1" "$conditions_native_file"
-        if [ -n "${EXTRA_PARAMS+x}" ] ; then
-            translate_extra_parameters EXTRA_PARAMS "$1" "$labels_native_file" "Weather: "
+        translate_labels PARAMETER_LABELS PARAMETER_IDS \
+            "$1" "$labels_native_file" "Weather: "
+        translate_codes CONDITIONS "$1" "$conditions_native_file" "Weather: "
+        if [ -n "${EXTRA_PARAMS+x}" ] ; then 
+            translate_extra_parameters EXTRA_PARAMS "$1" \
+                "$labels_native_file" "Weather: "
         fi
         echo 100  >&"${progress_dlg[1]}"
     fi
