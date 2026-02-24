@@ -8,33 +8,40 @@ TAB=$'\t'
 LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
 RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
 WARNING_ICON=$'\u26A0'
-NO_BREAK_SPACE=$'\u00A0'
-FULLWIDTH_LEFT_PARENTHESIS=$'\uFF08'
-FULLWIDTH_RIGHT_PARENTHESIS=$'\uFF09'
-DOUBLE_QUOTE=$'\u0022'
+RIGHT_PARENTHESES=$')\uFF09'
 
-COLONS=(
-    ':'        # COLON
-    # potential colon substitutes
-    $'\u003A'  # ASCII_COLON
-    $'\uFF1A'  # FULL_WIDTH_COLON
+PUNCTUATION=(
+    ':'
+    '.'
+    ','
     $'\uFE13'  # VERTICAL_COLON
     $'\uFE55'  # SMALL_COLON
-    $'\u1361'  # ETHIOPIC_WORDSPACE
-    $'\u0589'  # ARMENIAN_FULL_STOP
+    $'\uFF1A'  # FULL_WIDTH_COLON
+    $'\u3002'  # IDEOGRAPHIC_FULL_STOP
+    $'\uFE51'  # SMALL_IDEOGRAPHIC_COMMA
+    $'\uFF64'  # HALFWIDTH_IDEOGRAPHIC_COMMA
+    $'\u0964'  # DEVANAGARI_DANDA
+    $'\u0903'  # DEVANAGARI_SIGN_VISARGA
+    $'\u06D4'  # ARABIC_FULL_STOP
+    $'\u060C'  # ARABIC_COMMA
     $'\u05C3'  # HEBREW_SOF_PASUQ
+    $'\u0589'  # ARMENIAN_FULL_STOP
+    $'\u055D'  # ARMENIAN_COMMA
+    $'\u1362'  # ETHIOPIC_FULL_STOP
+    $'\u1363'  # ETHIOPIC_COMMA
+    $'\u1361'  # ETHIOPIC_WORDSPACE
     $'\uA789'  # MODIFIER_LETTER_COLON
     $'\u2236'  # RATIO_COLON
     $'\u205A'  # TWO_DOT_PUNCTUATION
+    $'\uFF0C'  # FULLWIDTH_COMMA
 )
 
-STOPS=(
-    '.'
-    $'\u3002'  # IDEOGRAPHIC_FULL_STOP
-    $'\u0964'  # DEVANAGARI_DANDA
-    $'\u1362'  # ETHIOPIC_FULL_STOP
-)
+punctuation=${PUNCTUATION[*]}
+punctuation=${punctuation// /}
 
+# regex patterns applied to trans output
+PATTERN_DIVISIONS="([^${RIGHT_PARENTHESES}]+)"
+PATTERN_ELEMENTS="([0-9]+).*[${punctuation}]+\s*(.*)$"
 
 # default language
 LANGUAGE="en"
@@ -87,46 +94,59 @@ check_lang() {
     fi
 }
 
-strip_prefixes() (
-    colons=${COLONS[*]}
-    colons=${colons// /}
-    while read -r line; do
-        [[ "$line" =~ (warning|mismatch|^$) ]] && continue
-        line="${line#*[$colons]}"
-        echo "${line##[ ${NO_BREAK_SPACE}]}"
-    done <<< "$1"
-)
+normalise_digits() {
+  perl -CS -pe 's/\p{Nd}/$&+0/ge'
+}
+
+findall() {
+  local input=$1
+  local pattern=$2
+  local -n matches=$3
+
+  if [[ $input =~ $pattern ]] ; then
+    matches+=( "${BASH_REMATCH[0]}" )
+    findall "${input/${BASH_REMATCH[0]}/}" "$pattern" $3
+  fi
+}
 
 translate() {
-    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$1\""
-    trans_output="$(exec_command "$cmd")"
-    stops=${STOPS[*]}
-    stops=${stops// /}
-    # double quotes noticed in hebrew output    
-    trans_output="${trans_output//[${stops}${DOUBLE_QUOTE}]/}"
-    trans_output="${trans_output//[(${FULLWIDTH_LEFT_PARENTHESIS}]/}"
-    trans_output="${trans_output//[)${FULLWIDTH_RIGHT_PARENTHESIS}]/$'\n'}"
-    echo "$trans_output"
+    local trans_input=$1
+    local translation
+    local lang=$2
+    local -n divisions=$3
+
+    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$trans_input\""
+    translation="$(exec_command "$cmd")"
+    findall "$translation" "${PATTERN_DIVISIONS}" divisions 
+    last_index=$(( ${#divisions[@]} - 1 ))
+    last_match=${divisions[$last_index]}
+    [[ "$last_match" =~ ^([[:space:]]|[[:punct:]])*$ ]] && \
+        unset "divisions[$last_index]"
 }
 
 translate_locations() {
     local -n locations=$1
     local lang=$2
     local output_file=$3
-    local trans_input
-    local trans_output
+    local prefix=$4
     local location
+    local trans_input
+    local -a trans_divs
 
-    for location in "${locations[@]}"; do
-        trans_input+="(${location%:*}). "
+    for ((i=0; i < ${#locations[@]}; i++)); do
+        location=${locations[$i]} 
+        trans_input+="$i($prefix${location%:*}). "
     done
 
-    trans_output=$(translate "$trans_input")
+    translate "$trans_input" "$lang" trans_divs
     echo "LOCATIONS_NATIVE=(" > "$output_file"
-    while read -r line; do
-        [[ "$line" == "" ]] && continue
-        echo "${TAB}\"${line}\"" >> "$output_file"
-    done < <(echo "$trans_output")
+
+    for div in "${trans_divs[@]}" ; do
+        [[ "$div" =~ $PATTERN_ELEMENTS ]]
+        translation="${BASH_REMATCH[2]}"
+        echo "${TAB}\"${translation}\"" >> "$output_file"
+    done
+
     echo ")" >> "$output_file"
 }
 
@@ -137,61 +157,50 @@ translate_labels() {
     local output_file=$4
     local prefix=$5
     local trans_input
-    local trans_output
-    local translated_lines
+    local -a trans_divs
+    local translation
 
-    for label in "${labels[@]}"; do
-        trans_input+="($prefix$label). "
+    for ((i=0; i < ${#labels[@]}; i++)); do
+        trans_input+="$i($prefix${labels[$i]}). "
     done
 
-    trans_output=$(translate "$trans_input")
-    if [[ -n "$prefix" ]]; then
-        translated_lines="$(strip_prefixes "$trans_output")"
-    else
-        translated_lines="$trans_output"
-    fi
-    mapfile -t translations <<< "$translated_lines"
+    translate "$trans_input" "$lang" trans_divs
 
-    for (( i=0; i < ${#label_ids[@]}; ++i )); do
-        trans="${translations[i]}"
-        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && trans="${trans^}"
-        echo "${label_ids[i]}=\"${trans#"${trans%%[![:space:]]*}"}\"" \
-            >> "$output_file"
+    for div in "${trans_divs[@]}" ; do
+        [[ "$div" =~ $PATTERN_ELEMENTS ]]
+        index=$(normalise_digits <<< "${BASH_REMATCH[1]}")
+        translation="${BASH_REMATCH[2]}"
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && translation="${translation^}"
+        echo "${label_ids[$index]}=\"${translation}\"" >> "$output_file"
     done
 }
 
 translate_codes() {
-    local -n codes=$1
     local lang=$2
     local output_file=$3
     local prefix=$4
     local trans_input
-    local trans_output
-    local translated_lines
+    local -a trans_divs
     local code
-    local i=0
+    local description
 
-    # big chunks can break trans
-    for (( i=0; i < "${#codes[@]}"; ++i )); do
-        code="${codes[$i]}"
-        [[ $code == "" ]] && code="*******"
-        if (( i < 33 )) ; then
-            trans_input1+="($prefix$code). "
-        elif (( i < 66 )) ; then
-            trans_input2+="($prefix$code). "
-        else
-            trans_input3+="($prefix$code). "
+    for (( i=0; i < 100; i++ )) ; do
+        if [[ ${CONDITIONS[${i}]} ]] ; then
+            trans_input+="$i($prefix${CONDITIONS[${i}]}). "
         fi
     done
 
-    trans_output="$(translate "$trans_input1")${NL}"
-    trans_output+="$(translate "$trans_input2")${NL}"
-    trans_output+="$(translate "$trans_input3")"
-    translated_lines="$(strip_prefixes "$trans_output")"
+    translate "$trans_input" "$lang" trans_divs
     echo "CONDITIONS_NATIVE=(" > "$output_file"
-    while read -r line; do
-        echo "${TAB}\"${line}\"" >> "$output_file"
-    done < <(echo "$translated_lines")
+
+    for element in "${trans_divs[@]}" ; do
+        [[ $element =~ $PATTERN_ELEMENTS ]]
+        code=$(normalise_digits <<< "${BASH_REMATCH[1]}")
+        description="${BASH_REMATCH[2]}"
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && description="${description^}"
+        echo "${TAB}[$code]=\"${description}\"" >> "$output_file"
+    done
+
     echo ")" >> "$output_file"
 }
 
@@ -201,39 +210,34 @@ translate_extra_parameters() {
     local output_file=$3
     local prefix=$4
     local trans_input
-    local trans_output
-    local translated_lines
+    local -a trans_divs
 
-    for p in "${params[@]}" ; do
+    for ((i=0; i < ${#params[@]}; i++)); do
+        p=${params[$i]}
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="($prefix$p). "
+        trans_input+="$i($prefix$p). "
     done
 
-    trans_output=$(translate "$trans_input")
+    translate "$trans_input" "$lang" trans_divs
 
-    if [[ -n "$prefix" ]]; then
-        translated_lines="$(strip_prefixes "$trans_output")"
-    else
-        translated_lines="$trans_output"
-    fi
-
-    local i=0
-    while read -r line; do
+    for element in "${trans_divs[@]}" ; do
+        [[ $element =~ $PATTERN_ELEMENTS ]]
+        i=$(normalise_digits <<< "${BASH_REMATCH[1]}")
+        trans="${BASH_REMATCH[2]}"
         case "${params[i]}" in
             "cape" )
                 k="CAPE"
-                line=$k ;;
+                trans="$k" ;;
             "total_column_integrated_water_vapour" )
                 k="TCWV"
-                line=$k ;;
+                trans="$k" ;;
             *)
                 typeset -u k="${params[i]}"
         esac
-        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && line="${line^}"
-        echo "$k=\"${line}\"" >> "$output_file"
-        (( ++i ))
-    done <<< "$translated_lines"
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && trans="${trans^}"
+        echo "$k=\"${trans}\"" >> "$output_file"
+    done
 }
 
 label_weather() {
@@ -306,7 +310,7 @@ if [[ -n "$1"  ]] ; then
             --text="Translating labels and locations..." ; }
         # translate_labels <labels> <label ids> <lang> <output file> [prefix]
         # where prefix is used to influence translate-shell results
-        translate_locations LOCATIONS "$1" "$locations_native_file"
+        translate_locations LOCATIONS "$1" "$locations_native_file" "Location: "
         translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "Command: "
         translate_labels PARAMETER_LABELS PARAMETER_IDS \
             "$1" "$labels_native_file" "Weather: "
