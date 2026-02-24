@@ -115,7 +115,8 @@ translate() {
     local lang=$2
     local -n divisions=$3
 
-    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$trans_input\""
+    # translation parsing is geared for output from the google engine
+    cmd="trans -b -4 -no-warn -e \"google\" -4 en:$lang \"$trans_input\""
     translation="$(exec_command "$cmd")"
     findall "$translation" "${PATTERN_DIVISIONS}" divisions 
     last_index=$(( ${#divisions[@]} - 1 ))
