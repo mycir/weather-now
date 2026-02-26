@@ -124,9 +124,9 @@ FRIENDLY_NAMES = {
     "temperature_2m": "temperature",
     "relative_humidity_2m": "humidity",
     "apparent_temperature": "feels_like",
-    "wind_speed_10m": "wind",
-    "wind_gusts_10m": "gusts",
-    "wind_direction_10m": "direction",
+    "wind_speed_10m": "wind_speed",
+    "wind_gusts_10m": "wind_gusts",
+    "wind_direction_10m": "wind_direction",
     "weather_code": "conditions",
     "pressure_msl": "pressure",
     "cape": "CAPE",
@@ -238,7 +238,8 @@ def geocode(placename, country_code):
     '''Get location coordinates.'''
     params = f"name={placename}&countryCode={country_code}"
     result = requests.get(
-        url=f"https://geocoding-api.open-meteo.com/v1/search?{params}")
+        url=f"https://geocoding-api.open-meteo.com/v1/search?{params}",
+        timeout=(2, 5))
     location = result.json()
     try:
         name = str(location['results'][0]['name'])
@@ -247,7 +248,7 @@ def geocode(placename, country_code):
     except KeyError:
         raise RuntimeError(
             "Location not found. Did you forget to supply a valid " +
-            "-l <country_code> option?")
+            "-c <country_code> option?")
     return name, latitude, longitude
 
 
@@ -294,90 +295,103 @@ def get_weather_graphic(graphic_type, code, is_day):
     return graphic_type.get(f"{category}{suffix}", graphic_type["cloudy"])
 
 
-def fetch_weather(latitude, longitude, params_extra, units):
+def fetch_weather(latitude, longitude, params_extra, units, want_series):
     """Fetch current weather data from Open-Meteo API."""
-    params = f"latitude={latitude}&longitude={longitude}" + \
-        "&timezone=auto&current=is_day" + \
-        "&temperature_unit=" + units["temperature"] + \
-        "&wind_speed_unit=" + units["wind"] + \
-        "&precipitation_unit=" + units["precipitation"] + "&"
+    quarters = 23 if want_series else 0
+    params = (
+        f"latitude={latitude}&longitude={longitude}"
+        f"&past_minutely_15={quarters}&forecast_minutely_15=1"
+        f"&timezone=auto&temperature_unit={units['temperature']}"
+        f"&wind_speed_unit={units['wind']}"
+        f"&precipitation_unit={units['precipitation']}&minutely_15=is_day,")
 
     for param in params_extra:
-        params += f"&current={param}"
+        params += f"{param},"
 
-    response = requests.get(API_URL, params=params)
+    params = params.rstrip(',')
+    response = requests.get(API_URL, params=params, timeout=(2, 5))
     response.raise_for_status()
     return response.json()
 
 
 def display_weather(location_name, data, wind_in_degrees, output_type):
     """Format and display weather information."""
-    current = data["current"]
-    units = data["current_units"]
     lat, lon = (data["latitude"], data["longitude"])
+    units = data["minutely_15_units"]
     units["time"] = ""
-    if not wind_in_degrees:
-        current["wind_direction_10m"] = \
-            degrees_to_compass(current["wind_direction_10m"])
-        units["wind_direction_10m"] = ""
-    weather_code = current["weather_code"]
-    if output_type == "data-alt":
-        current["weather_code"] = \
-            f"{weather_code}[{get_weather_description(weather_code)}]"
-    else:
-        current["weather_code"] = get_weather_description(weather_code)
-    units["weather_code"] = ""
-    if output_type == "classic":
-        header = (
-            f"Weather for {location_name}, {lat}, {lon} at {current['time']}"
-        )
-        del current["time"]
-        print(header)
-        print("=" * len(header))
-        # Display ASCII art
-        print(get_weather_graphic(
-            WEATHER_ASCII_ART, weather_code, current["is_day"]))
-    else:
-        symbol = get_weather_graphic(
-                    WEATHER_SYMBOLS,
-                    weather_code,
-                    current["is_day"])
-    if units["visibility"] == "ft" and current["visibility"] >= 5280:
-        current["visibility"] = round(current["visibility"] / 5280, 2)
-        units["visibility"] = "miles"
-    elif current["visibility"] >= 1000:
-        current["visibility"] = round(current["visibility"] / 1000, 2)
-        units["visibility"] = "km"
-    del current["interval"]
-    del current["is_day"]
+    units["wind_direction_10m"] = "°"  # Open-Meteo returns '%'
     print(f"Coordinates: {lat},{lon}")
+    n_times = len(data["minutely_15"]["time"])
 
-    for param in current:
-        try:
-            label = FRIENDLY_NAMES[param]
-        except (KeyError):
-            label = param
-        value = current[param]
-        unit = units[param]
-        if value is None:
-            value = "n/a"
-            unit = ""
-        if not label.isupper():
-            label = label.replace('_', ' ').capitalize()
-        print(f"{label}: {value}{unit}")
+    for i in range(n_times - 1, -1, -1):
+        data_minutely_15 = data["minutely_15"]
+        if not wind_in_degrees:
+            data_minutely_15["wind_direction_10m"][i] = \
+                degrees_to_compass(data_minutely_15["wind_direction_10m"][i])
+            units["wind_direction_10m"] = ""
+        weather_code = data_minutely_15["weather_code"][i]
+        if output_type == "data-alt":
+            data_minutely_15["weather_code"][i] = \
+                f"{weather_code}[{get_weather_description(weather_code)}]"
+        else:
+            data_minutely_15["weather_code"][i] = \
+                get_weather_description(weather_code)
+        units["weather_code"] = ""
+        if output_type == "classic":
+            header = (
+                f"Weather for {location_name}, {lat}, {lon} "
+                f"at {data_minutely_15['time'][i]}")
+            # del data_time_n["time"][n]
+            print(header)
+            print("=" * len(header))
+            # Display ASCII art
+            print(get_weather_graphic(
+                WEATHER_ASCII_ART, weather_code, data_minutely_15["is_day"][i]))
+        else:
+            symbol = get_weather_graphic(
+                        WEATHER_SYMBOLS,
+                        weather_code,
+                        data_minutely_15["is_day"][i])
+        if units["visibility"] == \
+                "ft" and data_minutely_15["visibility"][i] >= 5280:
+            data_minutely_15["visibility"][i] = \
+                round(data_minutely_15["visibility"][i] / 5280, 2)
+            units["visibility"] = "miles"
+        elif data_minutely_15["visibility"][i] >= 1000:
+            data_minutely_15["visibility"][i] = \
+                round(data_minutely_15["visibility"][i] / 1000, 2)
+            units["visibility"] = "km"
 
-    if output_type != "classic":
-        print(f"Weather symbol: {symbol}")
+        for param in data_minutely_15:
+            if param != "is_day":
+                try:
+                    label = FRIENDLY_NAMES[param]
+                except (KeyError):
+                    label = param
+                value = data_minutely_15[param][i]
+                unit = units[param]
+                if value is None:
+                    value = "n/a"
+                    unit = ""
+                if not label.isupper():
+                    label = label.replace('_', ' ').capitalize()
+                print(f"{label}: {value}{unit}")
+
+        if output_type != "classic":
+            print(f"Weather symbol: {symbol}")
+        if i:
+            print("\n")
 
 
-def main(placename, country_code, output_type, units, wind_degrees, stdin):
+def main(placename, country_code, want_series,
+         output_type, units, wind_degrees, take_stdin):
     """Main entry point."""
     try:
         location_name, latitude, longitude = geocode(placename, country_code)
         params = WEATHER_PARAMS_BASIC
-        if stdin:
+        if take_stdin:
             params += [line.strip() for line in sys.stdin]
-        data = fetch_weather(latitude, longitude, params, units)
+        data = fetch_weather(latitude, longitude, params, units, want_series)
         display_weather(location_name, data, wind_degrees, output_type)
     except requests.exceptions.RequestException as e:
         print(f"Error fetching weather data: {e}")
@@ -396,7 +410,7 @@ if __name__ == "__main__":
         usage=("%(prog)s [-l <placename>] [-c <country_code>]"
                f"\n{' ' * 22}[-t [celsius|fahrenheit]] "
                "[-p [mm|inch]] [-w [kmh|ms|mph|kn]]"
-               f"\n{' ' * 22}[-d] [-o [classic|data|data-alt]]"
+               f"\n{' ' * 22}[-d] [-s] [-o [classic|data|data-alt]]"
                "\n\n       When - is appended, read additional "
                "weather parameters from standard input."),
         formatter_class=argparse.RawTextHelpFormatter
@@ -445,6 +459,11 @@ if __name__ == "__main__":
         action='store_true'
     )
     parser.add_argument(
+        "-s",
+        help="show last 6 hours of data as a series",
+        action='store_true'
+    )
+    parser.add_argument(
         "-o",
         help=dedent('''\
             output style: classic (heading, ascii art and data),
@@ -456,13 +475,13 @@ if __name__ == "__main__":
     )
     try:
         args, unknown = parser.parse_known_args()
-        stdin = False
+        take_stdin = False
         index, index_last = 0, len(unknown) - 1
         for u in unknown:
             if u == '-':
                 if index == index_last:
                     del unknown[index]
-                    stdin = True
+                    take_stdin = True
                     break
                 else:
                     parser.error("improper use of '-'")
@@ -487,4 +506,6 @@ if __name__ == "__main__":
 
     wind_degrees = args["d"]
     args_count = len(sys.argv)
-    exit(main(args["l"], args["c"], args["o"], units, wind_degrees, stdin))
+    exit(main(
+        args["l"], args["c"], args["s"], args["o"],
+        units, wind_degrees, take_stdin))

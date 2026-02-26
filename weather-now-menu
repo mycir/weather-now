@@ -105,7 +105,7 @@ findall() {
 
   if [[ $input =~ $pattern ]] ; then
     matches+=( "${BASH_REMATCH[0]}" )
-    findall "${input/${BASH_REMATCH[0]}/}" "$pattern" $3
+    findall "${input/${BASH_REMATCH[0]}/}" "$pattern" "$3"
   fi
 }
 
@@ -118,7 +118,9 @@ translate() {
     # translation parsing is geared for output from the google engine
     cmd="trans -b -4 -no-warn -e \"google\" -4 en:$lang \"$trans_input\""
     translation="$(exec_command "$cmd")"
-    findall "$translation" "${PATTERN_DIVISIONS}" divisions 
+    # filter out known spurious characters
+    translation="${translation//[\'\"\\]/}"
+    findall "$translation" "${PATTERN_DIVISIONS}" divisions
     last_index=$(( ${#divisions[@]} - 1 ))
     last_match=${divisions[$last_index]}
     [[ "$last_match" =~ ^([[:space:]]|[[:punct:]])*$ ]] && \
@@ -133,6 +135,7 @@ translate_locations() {
     local location
     local trans_input
     local -a trans_divs
+    local translation
 
     for ((i=0; i < ${#locations[@]}; i++)); do
         location=${locations[$i]} 
@@ -332,6 +335,7 @@ while true; do
 
     if [ -n "${last_location+x}" ] ; then
         unset location_data
+        unset symbol
         results=""
     fi
     if [[ -f "$last_location_file" ]]; then
@@ -416,8 +420,10 @@ while true; do
 
     if [[ "$CONFIG_NAME" == "simple" ]] ; then
         output_type="simple"
+        series=""
     else
         output_type="data-alt"
+        series="-s"
     fi
 
     params_extra="${EXTRA_PARAMS[*]}"
@@ -436,14 +442,14 @@ while true; do
                 results+="$k: ${CONDITIONS_NATIVE["$code"]}${NL}"
             fi ;;
         "Weather symbol" )
-            symbol=$v ;;
+            [[ -z "${symbol+x}" ]] && symbol=$v ;;
         *)
             results+="$line${NL}" ;;
         esac
     done < <(exec_command "echo \"$params_extra\" | \"$script_dir/weather_now.py\" \
         -l \"$placename\" -c \"$country_code\" \
         -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
-        -w \"$WIND_SPEED_UNIT\" $WIND_IN_DEGREES -o \"data-alt\" -")
+        -w \"$WIND_SPEED_UNIT\" $WIND_IN_DEGREES $series -o \"data-alt\" -")
 
     if [[ "$LANGUAGE" == "en" ]] ; then
         weather="$results"

@@ -1,5 +1,9 @@
 # Changelog
 
+## Feb. 2026 iv.
+
+- Option to display last 6 hours of 15 minutely data.
+
 ## Feb. 2026 iii.
 
 - Read optional weather parameters from stdin.

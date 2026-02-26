@@ -2,12 +2,12 @@
 
 ## [**weather_now.py**](weather_now.py)
 
-A Python scipt to display [Open-Meteo API](https://open-meteo.com/en/docs) data for current weather on the command line. It is based on code originally published under the [MIT](https://opensource.org/license/mit) licence, with minor adaptations (see [**changelog**](CHANGELOG.md)).
+A Python scipt to display [Open-Meteo API](https://open-meteo.com/en/docs) data for current weather on the command line. It includes some code originally published under the [MIT](https://opensource.org/license/mit) licence (see [**changelog**](CHANGELOG.md)).
 
 ```
 usage: weather_now.py [-l <placename>] [-c <country_code>]
                       [-t [celsius|fahrenheit]] [-p [mm|inch]] [-w [kmh|ms|mph|kn]]
-                      [-d] [-o [classic|data|data-alt]]
+                      [-d] [-s] [-o [classic|data|data-alt]]
 
        When - is appended, read additional weather parameters from standard input.
 
@@ -19,6 +19,7 @@ options:
   -p          precipitation unit: mm or inch
   -w          wind speed unit: kmh, ms, mph or kn
   -d          wind direction: show in degrees
+  -s          show last 6 hours of data as a series
   -o          output style: classic (heading, ascii art and data),
               data (just data) or data-alt (conditions code and description)
 ```
@@ -86,8 +87,9 @@ Create your own as required. (EXTRA_PARAMS can be any from weather_now.py WEATHE
 
 Notes:
 1. Weather is displayed in a scrollable zenity --text-info
-2. RESULTS_FONT is Noto Sans Bold, change to suit.
-3. WIND_IN_DEGREES can be commented out to display wind_direction_10m as a compass ordinal.</br>
+2. The last 6 hours of 15 minutely data is shown.
+3. RESULTS_FONT is Noto Sans Bold, change to suit.
+4. WIND_IN_DEGREES can be commented out to display wind_direction_10m as a compass ordinal.</br>
 
 ## Screenshots
 
