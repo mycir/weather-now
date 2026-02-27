@@ -38,7 +38,7 @@ Translate locations and labels before displaying current weather:
 
 Display current weather and dialog labels in English, or per last supplied language code:
 
-    weather-now
+    weather-now-menu
 ```
 
 ## More information
