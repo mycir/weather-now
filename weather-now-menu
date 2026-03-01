@@ -41,7 +41,7 @@ punctuation=${punctuation// /}
 
 # regex patterns applied to trans output
 PATTERN_DIVISIONS="([^${RIGHT_PARENTHESES}]+)"
-PATTERN_ELEMENTS="([0-9]+).*[${punctuation}]+\s*(.*)$"
+PATTERN_ELEMENTS="([0-9]+)[^${punctuation}]*\s*[${punctuation}]+\s*(.*)$"
 
 # default language
 LANGUAGE="en"
@@ -53,7 +53,7 @@ export TOP_PID=$$
 error_exit() {
     cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1${NL}${NL}"
     output_info="$TEXT_OUTPUT:${NL}${NL}$3"
-
+    
     if zenity --text-info --title="$TITLE${NL}$WARNING_ICON $TEXT_ERROR" \
         --width=600 --height=500 \
         --cancel-label="${LRM}$ERROR_BTN_EXIT" \
@@ -64,6 +64,13 @@ error_exit() {
         kill -s TERM $TOP_PID
         echo 0
     fi
+}
+
+fail_exit() {
+    zenity --text-info --title="$TITLE${NL}$WARNING_ICON $1" \
+        --width=600 --height=500 --cancel-label="" <<< "$2"
+    >&2 echo "$1:${NL}${NL}$2"
+    kill -s TERM $TOP_PID
 }
 
 exec_command() {
@@ -95,18 +102,26 @@ check_lang() {
 }
 
 normalise_digits() {
-  perl -CS -pe 's/\p{Nd}/$&+0/ge'
+    perl -CS -MUnicode::UCD=charinfo -pe \
+        's/\p{Nd}/charinfo(ord($&))->{numeric}/ge'
 }
 
 findall() {
-  local input=$1
-  local pattern=$2
-  local -n matches=$3
+    local input=$1
+    local pattern=$2
+    local -n matches=$3
+    local countdown=$4
 
-  if [[ $input =~ $pattern ]] ; then
-    matches+=( "${BASH_REMATCH[0]}" )
-    findall "${input/${BASH_REMATCH[0]}/}" "$pattern" "$3"
-  fi
+    (( countdown-- ))
+    if [[ $input =~ $pattern ]] ; then
+        # prevent infinite recursion if parsing fails
+        if (( countdown >= -1 )) ; then
+            matches+=( "${BASH_REMATCH[0]}" )
+            findall "${input/${BASH_REMATCH[0]}/}" "$pattern" "$3" "$countdown"
+        else
+            return 1
+        fi
+    fi
 }
 
 translate() {
@@ -114,17 +129,36 @@ translate() {
     local translation
     local lang=$2
     local -n divisions=$3
+    local last_index_in=$4
 
     # translation parsing is geared for output from the google engine
-    cmd="trans -b -4 -no-warn -e \"google\" -4 en:$lang \"$trans_input\""
+    cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$trans_input\""
     translation="$(exec_command "$cmd")"
-    # filter out known spurious characters
-    translation="${translation//[\'\"\\]/}"
-    findall "$translation" "${PATTERN_DIVISIONS}" divisions
-    last_index=$(( ${#divisions[@]} - 1 ))
-    last_match=${divisions[$last_index]}
+    # >&2 echo "$trans_input"
+    # >&2 echo "$translation"
+    # filter out known alien characters
+    translation="${translation//[${ALIEN_CHARS}]/}"
+    if ! findall "$translation" "${PATTERN_DIVISIONS}" divisions "$last_index_in" ; then
+        err_msg1=$'This may be caused by alien characters that prevent parsing '
+        err_msg2=$'of translated text for delimiters (see README.md).\n\n'
+        err_msg3="Input:${NL}${NL}${trans_input}${NL}${NL}"
+        err_msg4="Output:${NL}${NL}${translation}"
+        fail_exit "Parsing error" "$err_msg1$err_msg2$err_msg3$err_msg4" 
+    fi
+    last_index_out=$(( ${#divisions[@]} - 1 ))
+    if (( last_index_out < 0 )) ; then
+        err_msg1=$'This may be caused by use of a language code unsupported '
+        err_msg2=$'by Google, e.g. tlh-Latn (Klingon). Otherwise, it may be '
+        err_msg3='due to a temporary translation engine or network error. '
+        err_msg4=$'In this case, try restarting weather-now-menu.\n\n'
+        err_msg5="Input:${NL}${NL}${trans_input}${NL}${NL}"
+        err_msg6="Output:${NL}${NL}${translation}"
+        fail_exit "Parsing error" \
+            "$err_msg1$err_msg2$err_msg3$err_msg4$err_msg5$err_msg6" 
+    fi
+    last_match=${divisions[$last_index_out]}
     [[ "$last_match" =~ ^([[:space:]]|[[:punct:]])*$ ]] && \
-        unset "divisions[$last_index]"
+        unset "divisions[$last_index_out]"
 }
 
 translate_locations() {
@@ -139,10 +173,10 @@ translate_locations() {
 
     for ((i=0; i < ${#locations[@]}; i++)); do
         location=${locations[$i]} 
-        trans_input+="$i($prefix${location%:*}). "
+        trans_input+="$i ($prefix${location%:*}). "
     done
 
-    translate "$trans_input" "$lang" trans_divs
+    translate "$trans_input" "$lang" trans_divs $i
     echo "LOCATIONS_NATIVE=(" > "$output_file"
 
     for div in "${trans_divs[@]}" ; do
@@ -165,10 +199,10 @@ translate_labels() {
     local translation
 
     for ((i=0; i < ${#labels[@]}; i++)); do
-        trans_input+="$i($prefix${labels[$i]}). "
+        trans_input+="$i ($prefix${labels[$i]}). "
     done
 
-    translate "$trans_input" "$lang" trans_divs
+    translate "$trans_input" "$lang" trans_divs $i
 
     for div in "${trans_divs[@]}" ; do
         [[ "$div" =~ $PATTERN_ELEMENTS ]]
@@ -190,11 +224,11 @@ translate_codes() {
 
     for (( i=0; i < 100; i++ )) ; do
         if [[ ${CONDITIONS[${i}]} ]] ; then
-            trans_input+="$i($prefix${CONDITIONS[${i}]}). "
+            trans_input+="$i ($prefix${CONDITIONS[${i}]}). "
         fi
     done
 
-    translate "$trans_input" "$lang" trans_divs
+    translate "$trans_input" "$lang" trans_divs ${#CONDITIONS[@]}
     echo "CONDITIONS_NATIVE=(" > "$output_file"
 
     for element in "${trans_divs[@]}" ; do
@@ -220,10 +254,10 @@ translate_extra_parameters() {
         p=${params[$i]}
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="$i($prefix$p). "
+        trans_input+="$i ($prefix$p). "
     done
 
-    translate "$trans_input" "$lang" trans_divs
+    translate "$trans_input" "$lang" trans_divs $i
 
     for element in "${trans_divs[@]}" ; do
         [[ $element =~ $PATTERN_ELEMENTS ]]

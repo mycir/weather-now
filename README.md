@@ -59,6 +59,10 @@ NB Any subsequent change of language will overwrite alterations.
 
 **Important! In the case of RTL languages, weather-now-menu must be run from a terminal that fully supports RTL languages, e.g. gnome-terminal or KDE Konsole. If running from the VSCode integrated terminal (as of v1.109.2), expect labels-native to contain translations rendered back to front, i.e. nonsense.**
 
+**If translation fails, this may be due to alien characters that prevent parsing of translated text for delimiters. For example, ', " and \ were noted in Hebrew output. These are now defined as ALIEN_CHARS in weather-now-menu.conf and filtered out. Should you encounter this problem, examine translated output and add offending characters to ALIEN_CHARS.**
+
+**It is recommended to use the default ENGINE=google setting in weather-now-menu.conf . However, some languages, e.g. Sanskrit, are problematic and in this case ENGINE=bing produced a better result.**
+
 ## Specialist configs
 
 Replace the weather-now-menu.conf in your script folder with one of these:
