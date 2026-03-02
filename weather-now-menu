@@ -40,17 +40,16 @@ PUNCTUATION=(
     $'\uABEB'  # MEETEI_MAYEK_CHEIKHEI
 )
 
-REGEX_BLIND=(
-    # Possibly version specific, Bash regex, as dependent
-    # on system regcomp/regexec, may be blind to some
-    # unicode digits in certain situations.
-    $'\u17E9'  # KHMER_DIGIT_NINE
-    $'\uABF9'  # MEETEI_MAYEK_DIGIT_NINE
-    $'\u096F'  # DEVANAGARI_DIGIT_NINE
-    $'\u09EF'  # BENGALI_DIGIT_NINE
-    $'\u0F29'  # TIBETAN_DIGIT_NINE
-    $'\u1049'  # MYANMAR_DIGIT_NINE
-)
+NINES=(
+    # Possibly version specific, Bash regex, as dependent on system regex,
+    # appears to be blind to some unicode 9s in certain situations.
+    # The following will be used to build a reges range of 9s:
+    $'\u0669' $'\u06F9' $'\u07C9' $'\u096F' $'\u09EF' $'\u0A6F' $'\u0AEF'
+    $'\u0B6F' $'\u0BEF' $'\u0C6F' $'\u0CEF' $'\u0D6F' $'\u0DEF' $'\u0E59'
+    $'\u0ED9' $'\u0F29' $'\u0F32' $'\u1049' $'\u1099' $'\u1371' $'\u17E9'
+    $'\u1819' $'\u194F' $'\u19D9' $'\u1A89' $'\u1A99' $'\u1B59' $'\u1BB9'
+    $'\u1C49' $'\u1C59' $'\uA629' $'\uA6EE' $'\uA8D9' $'\uA909' $'\uA9D9'
+    $'\uA9F9' $'\uAA59' $'\uABF9')
 
 # regex range - alien characters that occur in some translations,
 # e.g. Hebrew, and disrupt parsing for delimiters
@@ -58,12 +57,12 @@ ALIEN_CHARS="\'\\\"\\\\"
 
 punct=${PUNCTUATION[*]}
 punct=${punct// /}
-regex_blind=${REGEX_BLIND[*]}
-regex_blind=${regex_blind// /}
+nines=${NINES[*]}
+nines=${nines// /}
 
 # regex patterns applied to trans output
 PATTERN_DIVISIONS="([^${RIGHT_PARENTHESES}]+)"
-PATTERN_ELEMENTS="([0-9${regex_blind}]+)[^${punct}]+[${punct}]+\s*-*\s*(.*)"
+PATTERN_ELEMENTS="([0-9${nines}]+)[^${punct}]+[${punct}]+\s*-*\s*(.*)"
 
 # default language
 LANGUAGE="en"
