@@ -12,8 +12,6 @@ RIGHT_PARENTHESES=$')\uFF09'
 
 PUNCTUATION=(
     ':'
-    '.'
-    ','
     $'\uFE13'  # VERTICAL_COLON
     $'\uFE55'  # SMALL_COLON
     $'\uFF1A'  # FULL_WIDTH_COLON
@@ -34,14 +32,35 @@ PUNCTUATION=(
     $'\u2236'  # RATIO_COLON
     $'\u205A'  # TWO_DOT_PUNCTUATION
     $'\uFF0C'  # FULLWIDTH_COMMA
+    $'\u0F0D'  # TIBETAN_MARK_SHAD
+    $'\u17D6'  # KHMER_SIGN_CAMNUC_PII_KUUH
+    $'\u1038'  # MYANMAR_SIGN_VISARGA
+    $'\uABEB'  # MEETEI_MAYEK_CHEIKHEI
 )
 
-punctuation=${PUNCTUATION[*]}
-punctuation=${punctuation// /}
+REGEX_BLIND=(
+    # Possibly version specific, Bash regex, as dependent
+    # on system regcomp/regexec, may be blind to some
+    # unicode digits in certain situations.
+    $'\u17E9'  # KHMER_DIGIT_NINE
+    $'\uABF9'  # MEETEI_MAYEK_DIGIT_NINE
+    $'\u096F'  # DEVANAGARI_DIGIT_NINE
+    $'\u09EF'  # BENGALI_DIGIT_NINE
+    $'\u0F29'  # TIBETAN_DIGIT_NINE
+)
+
+# regex range - alien characters that occur in some translations,
+# e.g. Hebrew, and disrupt parsing for delimiters
+ALIEN_CHARS="\'\\\"\\\\"
+
+punct=${PUNCTUATION[*]}
+punct=${punct// /}
+regex_blind=${REGEX_BLIND[*]}
+regex_blind=${regex_blind// /}
 
 # regex patterns applied to trans output
 PATTERN_DIVISIONS="([^${RIGHT_PARENTHESES}]+)"
-PATTERN_ELEMENTS="([0-9]+)[^${punctuation}]*\s*[${punctuation}]+\s*(.*)$"
+PATTERN_ELEMENTS="([0-9${regex_blind}]+)[^${punct}]+[${punct}]+\s*-*\s*(.*)"
 
 # default language
 LANGUAGE="en"
@@ -102,8 +121,12 @@ check_lang() {
 }
 
 normalise_digits() {
-    perl -CS -MUnicode::UCD=charinfo -pe \
-        's/\p{Nd}/charinfo(ord($&))->{numeric}/ge'
+    perl -CS -MUnicode::UCD=charinfo -pe '
+        s/\p{Nd}/charinfo(ord($&))->{numeric}/ge'
+}
+
+rstrip() {
+    echo "${1%"${1##*[![:space:]]}"}"
 }
 
 findall() {
@@ -134,8 +157,6 @@ translate() {
     # translation parsing is geared for output from the google engine
     cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$trans_input\""
     translation="$(exec_command "$cmd")"
-    # >&2 echo "$trans_input"
-    # >&2 echo "$translation"
     # filter out known alien characters
     translation="${translation//[${ALIEN_CHARS}]/}"
     if ! findall "$translation" "${PATTERN_DIVISIONS}" divisions "$last_index_in" ; then
@@ -173,13 +194,14 @@ translate_locations() {
 
     for ((i=0; i < ${#locations[@]}; i++)); do
         location=${locations[$i]} 
-        trans_input+="$i ($prefix${location%:*}). "
+        trans_input+="$i ( $prefix${location%:*} ). "
     done
 
     translate "$trans_input" "$lang" trans_divs $i
     echo "LOCATIONS_NATIVE=(" > "$output_file"
 
     for div in "${trans_divs[@]}" ; do
+        div=$(rstrip "$div")
         [[ "$div" =~ $PATTERN_ELEMENTS ]]
         translation="${BASH_REMATCH[2]}"
         echo "${TAB}\"${translation}\"" >> "$output_file"
@@ -199,17 +221,17 @@ translate_labels() {
     local translation
 
     for ((i=0; i < ${#labels[@]}; i++)); do
-        trans_input+="$i ($prefix${labels[$i]}). "
+        trans_input+="$i ( $prefix${labels[$i]} ). "
     done
 
     translate "$trans_input" "$lang" trans_divs $i
 
-    for div in "${trans_divs[@]}" ; do
-        [[ "$div" =~ $PATTERN_ELEMENTS ]]
-        index=$(normalise_digits <<< "${BASH_REMATCH[1]}")
+    for (( i=0; i < ${#label_ids[@]}; i++ )) ; do
+        div=$(rstrip "${trans_divs[$i]}")
+        [[ $div =~ $PATTERN_ELEMENTS ]]
         translation="${BASH_REMATCH[2]}"
         [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && translation="${translation^}"
-        echo "${label_ids[$index]}=\"${translation}\"" >> "$output_file"
+        echo "${label_ids[$i]}=\"${translation}\"" >> "$output_file"
     done
 }
 
@@ -224,15 +246,16 @@ translate_codes() {
 
     for (( i=0; i < 100; i++ )) ; do
         if [[ ${CONDITIONS[${i}]} ]] ; then
-            trans_input+="$i ($prefix${CONDITIONS[${i}]}). "
+            trans_input+="$i ( $prefix${CONDITIONS[${i}]} ). "
         fi
     done
 
     translate "$trans_input" "$lang" trans_divs ${#CONDITIONS[@]}
     echo "CONDITIONS_NATIVE=(" > "$output_file"
 
-    for element in "${trans_divs[@]}" ; do
-        [[ $element =~ $PATTERN_ELEMENTS ]]
+    for div in "${trans_divs[@]}" ; do
+        div=$(rstrip "$div")
+        [[ $div =~ $PATTERN_ELEMENTS ]]
         code=$(normalise_digits <<< "${BASH_REMATCH[1]}")
         description="${BASH_REMATCH[2]}"
         [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && description="${description^}"
@@ -254,13 +277,14 @@ translate_extra_parameters() {
         p=${params[$i]}
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="$i ($prefix$p). "
+        trans_input+="$i ( $prefix$p ). "
     done
 
     translate "$trans_input" "$lang" trans_divs $i
 
-    for element in "${trans_divs[@]}" ; do
-        [[ $element =~ $PATTERN_ELEMENTS ]]
+    for div in "${trans_divs[@]}" ; do
+        div=$(rstrip "$div")
+        [[ $div =~ $PATTERN_ELEMENTS ]]
         i=$(normalise_digits <<< "${BASH_REMATCH[1]}")
         trans="${BASH_REMATCH[2]}"
         case "${params[i]}" in
