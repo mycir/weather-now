@@ -12,6 +12,8 @@ RIGHT_PARENTHESES=$')\uFF09'
 
 PUNCTUATION=(
     ':'
+    '.'
+    ','
     $'\uFE13'  # VERTICAL_COLON
     $'\uFE55'  # SMALL_COLON
     $'\uFF1A'  # FULL_WIDTH_COLON
@@ -47,6 +49,7 @@ REGEX_BLIND=(
     $'\u096F'  # DEVANAGARI_DIGIT_NINE
     $'\u09EF'  # BENGALI_DIGIT_NINE
     $'\u0F29'  # TIBETAN_DIGIT_NINE
+    $'\u1049'  # MYANMAR_DIGIT_NINE
 )
 
 # regex range - alien characters that occur in some translations,
