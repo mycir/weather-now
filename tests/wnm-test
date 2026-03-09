@@ -180,7 +180,7 @@ translate_extra_parameters() {
 
     while IFS=':' read -r index translation ; do
         index=$(normalise_digits <<< "$index")
-        case "${params[i]}" in
+        case "${params[index]}" in
             "cape" )
                 k="CAPE"
                 translation="$k" ;;
@@ -243,8 +243,13 @@ last_location_file="$script_dir/last-location"
 
 [[ -e "$locations_file" ]] && source "${locations_file}"
 
-if [[ -n "$1"  ]] ; then
-    check_lang "$1"
+# global definitions, functions and setup from script under test
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+# wrap translation logic as a function and
+# insert write_to_lang_log calls as required
+
+test_lang() {
     rm -f "$last_location_file"
     rm -f "$labels_native_file"
     rm -f "$conditions_native_file"
@@ -259,170 +264,188 @@ if [[ -n "$1"  ]] ; then
         else
             echo 'LANGUAGE_DIRECTION="LTR"' >> "$labels_native_file"
         fi
-        coproc progress_dlg { zenity --progress --pulsate \
-            --no-cancel --auto-close \
-            --title="$TITLE" \
-            --text="Translating labels and locations..." ; }
         # translate_labels <labels> <label ids> <lang> <output file> [prefix]
         # where prefix is used to influence translate-shell results
         translate_locations LOCATIONS "$1" "$locations_native_file" "Location: "
+        write_to_lang_log "LOCATIONS" "$temp_dir/trans-output.tmp" "$lang_log_file"
         translate_labels LABELS LABEL_IDS "$1" "$labels_native_file" "Command: "
+        write_to_lang_log "LABELS" "$temp_dir/trans-output.tmp" "$lang_log_file"
         translate_labels PARAMETER_LABELS PARAMETER_IDS \
             "$1" "$labels_native_file" "Weather: "
-        translate_codes CONDITIONS "$1" "$conditions_native_file" "Weather: "
+        write_to_lang_log "PARAMETER_LABELS" "$temp_dir/trans-output.tmp" "$lang_log_file" 
         if [ -n "${EXTRA_PARAMS+x}" ] ; then 
             translate_extra_parameters EXTRA_PARAMS "$1" \
                 "$labels_native_file" "Weather: "
         fi
-        echo 100  >&"${progress_dlg[1]}"
+        write_to_lang_log "EXTRA_PARAMS" "$temp_dir/trans-output.tmp" "$lang_log_file" 
+        translate_codes CONDITIONS "$1" "$conditions_native_file" "Weather: "
+        write_to_lang_log "CONDITIONS" "$temp_dir/trans-output.tmp" "$lang_log_file"
+        files="$locations_native_file $labels_native_file $conditions_native_file" 
+        for f in $files ; do 
+            (underline "$(basename "${f}")" -; cat "${f}"; echo) >> "$lang_log_file"
+        done
     fi
-fi
+}
 
-[[ -e "$locations_native_file" ]] && source "${locations_native_file}"
-[[ -e "$labels_native_file" ]] && source "${labels_native_file}"
-[[ -e "$conditions_native_file" ]] && source "${conditions_native_file}"
+# ------------------ function redefines ------------------
 
-while true; do
+unset -f fail_exit
+unset -f exec_command
+unset -f parse_translation
 
-    if [ -n "${last_location+x}" ] ; then
-        unset location_data
-        unset symbol
-        results=""
+fail_exit() {
+    if [[ "$1" != "unsupported_language" ]] ; then
+        SUPPORTED_LANG=0
     fi
-    if [[ -f "$last_location_file" ]]; then
-        if [[ "$LANGUAGE" == "en" ]] ; then
-            IFS=':' read -r placename country_code index \
-                < <(cat "$last_location_file")
-        else
-            IFS=':' read -r placename_native placename country_code index \
-                < <(cat "$last_location_file")
+    return
+}
+
+exec_command() {
+    command="$1"
+    retry=5
+    
+    while (( retry )); do
+        echo "Executing command:${NL}${NL}${command:0:100}...${NL}" | \
+            tee -a "$tests_log_file" 1>&2
+        output="$(eval "$command" 2>&1)"
+        status=$?
+        if [[ "$output" == "" ]] ; then
+            err_msg1="Skipping test - trans returned an empty string. "
+            err_msg2="Language is probably unsupported by $ENGINE.${NL}"
+            echo "$err_msg1$err_msg2" | tee -a "$tests_log_file" 1>&2
+            fail_exit "unsupported_language"
+            break
         fi
-        # shellcheck disable=SC2153
-        if [[ " ${LOCATIONS[*]} " =~ ${placename}:${country_code} ]]; then
-            if [[ "$LANGUAGE" == en ]] ; then
-                location_data+=( "$placename" "$country_code" "$index" )
+        if (( status )); then
+            echo "$output${NL}" | tee -a "$tests_log_file" 1>&2
+            echo "Command failed with exit code $status, sleeping 5s..." | \
+                tee -a "$tests_log_file" 1>&2
+            if (( --retry )) ; then
+                sleep 5
+                echo "Retrying...${NL}" | tee -a "$tests_log_file" 1>&2
             else
-                location_data+=( "$placename_native" "$placename" \
-                    "$country_code" "$index" )
+                echo "Giving up and exiting.${NL}" | \
+                    tee -a "$tests_log_file" 1>&2
+                kill -s TERM $TOP_PID
             fi
-        fi
-    fi
-
-    for (( i=0; i < ${#LOCATIONS[@]}; i++ )); do
-        loc="${LOCATIONS[$i]}"
-        [[ "$loc" == "$placename:$country_code" ]] && continue
-        if [[ "$LANGUAGE" == en ]] ; then
-            location_data+=( "${loc%:*}" "${loc#*:}" "$i" )
         else
-            location_data+=( "${LOCATIONS_NATIVE[$i]}" \
-                "${loc%:*}" "${loc#*:}" "$i" )
+            retry=0
+            echo "$output"
         fi
     done
+}
 
-    if [[ "$LANGUAGE_DIRECTION" == "RTL" ]] ; then
-        width=600;height=600
-    else
-        width=500;height=400
+parse_translation() {
+    echo "$1" > "$temp_dir/trans-output.tmp"
+    result=$(echo "$1" | perl -CSD -lne 'print "$1:$5" while
+        /(\d+)([\s[:punct:]]+)([^[:punct:]]+)([\s[:punct:]]+)([^[:punct:]]+)/g')
+    while read -r line ; do
+        echo "${line%"${line##*[![:space:]]}"}"
+    done  <<< "$result"
+}
+
+# ------------------- functions required for tests -------------------
+
+validate_native_files() {
+    if (grep -icE '(=$|="")' "$labels_native_file" > /dev/null) ; then
+        VALIDATION_FAILS+="$1 ($2) - labels-native${NL}"
+        return
     fi
-
-    if [[ "$LANGUAGE" == "en" ]] ; then
-        location=$(zenity --list \
-            --title="$TITLE" \
-            --text="$MENU_TEXT:" \
-            --width="$width" \
-            --height="$height" \
-            --separator=":" \
-            --column="$COLUMN_LOCATION" \
-            --column="$COLUMN_COUNTRY_CODE" \
-            --column="$COLUMN_INDEX" \
-            --hide-column=3 \
-            --print-column=ALL \
-            --cancel-label="${LRM}$MENU_BTN_CANCEL" \
-            --ok-label="${LRM}$MENU_BTN_OK" \
-            "${location_data[@]}")
-    else
-        location=$(zenity --list \
-            --title="$TITLE" \
-            --text="$MENU_TEXT:" \
-            --width="$width" \
-            --height="$height" \
-            --separator=":" \
-            --column="$COLUMN_LOCATION_NATIVE" \
-            --column="$COLUMN_LOCATION" \
-            --column="$COLUMN_COUNTRY_CODE" \
-            --column="$COLUMN_INDEX" \
-            --hide-column=4 \
-            --print-column=ALL \
-            --cancel-label="${LRM}$MENU_BTN_CANCEL" \
-            --ok-label="${LRM}$MENU_BTN_OK" \
-            "${location_data[@]}")
+    indexes="$(cat "$conditions_native_file" | \
+        grep  -ioE '(\[.*\])' - | tr "\n" " ")"
+    if [[ "$indexes" != "$CONDITIONS_INDEXES" ]] || \
+        (grep -icE '(=$|="")' "$conditions_native_file" > /dev/null) ; then
+        VALIDATION_FAILS+="$1 ($2) - conditions-native${NL}"
+        return
     fi
+}
 
-    [[ -z "$location" ]] && exit 0
+write_to_lang_log() {
+    trans_output="$(cat "$2")"
+    # shellcheck disable=SC2129
+    underline "Analyse $1 at $(date +"%FT%T.%3N")" - >> "$lang_log_file"
+    echo "${NL}Parsed translation:${NL}" >> "$lang_log_file"
+    parse_translation "$trans_output" >> "$lang_log_file"
+    echo "${NL}Raw translatiom:${NL}" >> "$lang_log_file"
+    echo "$trans_output" | fmt -w 140 >> "$lang_log_file"
+    echo "${NL}Digits and punctuation found in raw translation:${NL}" >> "$lang_log_file"
+    echo "$trans_output" | uni i -f '%cpoint %char %name %cat' | \
+        grep -i -E "decimal|other_punctuation" | sort -u -k 2 >> "$lang_log_file"
+    echo >> "$lang_log_file"
+}
 
-    if [[ "$LANGUAGE" == "en" ]] ; then
-        IFS=':' read -r placename country_code index < <(echo "$location")
-        place="$placename"
+underline() { 
+    echo "$1"; echo "${1//?/$2}"
+}
+
+# -------------------- setup and run tests ----------------------
+
+tests_log_dir="$script_dir/logs/"
+tests_log_file="$tests_log_dir/tests.log"
+read -rp "Remove directory '$tests_log_dir' ? [y/N] " answer
+[ "$answer" = y ] && rm -r "$tests_log_dir"
+mkdir -p "$tests_log_dir"
+temp_dir="$(dirname "$(mktemp -u --tmpdir)")"
+source "$script_dir/langs"
+CONDITIONS_INDEXES="[0] [1] [2] [3] [45] [48] [51] [53] [55] [56] "
+CONDITIONS_INDEXES+="[57] [61] [63] [65] [66] [67] [71] [73] [75] "
+CONDITIONS_INDEXES+="[77] [80] [81] [82] [85] [86] [95] [96] [99] "
+VALIDATION_FAILS=""
+UNSUPPORTED_LANGS=""
+
+if [[ "$1" =~ [a-z]$ ]] ; then
+    for i in "${!LANGS[@]}"; do
+        if [[ "${LANGS[$i]}" =~ :$1 ]]; then
+            tests="$i "
+            break
+        fi
+    done
+elif [[ "$1" =~ [\d,]+ ]] ; then
+  end=${1##*,}
+  tests=${1//,/ }
+else
+  if [[ "$1" =~ \.\. ]] ; then
+    start=${1%..*}
+    end=${1#*..}
+  else
+    start=0
+    end=$(( ${#LANGS[@]} - 1 ))
+  fi
+  for (( i=start; i <= end; i++ )) ; do
+    [[ -v LANGS[$i] ]] && tests+="$i "
+  done
+fi
+
+log_header="Starting translation tests    $(date +"%FT%T.%3N")"
+echo "$(underline "$log_header" =)${NL}" > "$tests_log_file"
+
+for t in $tests ; do
+    lang="${LANGS[$t]#*:}"
+    lang_name=${LANGS[$t]%:*}
+    lang_log_file="$tests_log_dir/$lang.log"
+    rm -f "$lang_log_file"
+    start_banner="Starting test - $lang_name ($lang)   $(date +"%FT%T.%3N")"
+    echo "$(underline "$start_banner" -)${NL}" | \
+        tee -a "$tests_log_file" "$lang_log_file"
+    SUPPORTED_LANG=1
+    test_lang "$lang"
+    if (( SUPPORTED_LANG )) ; then
+        validate_native_files "$lang_name" "$lang"
+        (( t != end )) && sleep 10
     else
-        IFS=':' read -r placename_native placename country_code index \
-            < <(echo "$location")
-        place="$placename_native"
+        UNSUPPORTED_LANGS+="$lang_name ($lang) - labels-native${NL}"
     fi
-
-    if [[ "$CONFIG_NAME" == "simple" ]] ; then
-        output_type="simple"
-        series=""
-    else
-        output_type="data-alt"
-        series="-s"
-    fi
-
-    params_extra="${EXTRA_PARAMS[*]}"
-    params_extra=${params_extra// /${NL}}
-
-    while read -r line; do
-        k="${line%%:*}"
-        v=${line#*: }
-        case $k in
-        "Conditions")
-            code=${v%[*}
-            s=${v#*[};description=${s%*]}
-            if [[ "$LANGUAGE" == "en" ]] ; then
-                results+="$k: $description${NL}"
-            else
-                results+="$k: ${CONDITIONS_NATIVE["$code"]}${NL}"
-            fi ;;
-        "Weather symbol" )
-            [[ -z "${symbol+x}" ]] && symbol=$v ;;
-        *)
-            results+="$line${NL}" ;;
-        esac
-    done < <(exec_command "echo \"$params_extra\" | \"$script_dir/weather_now.py\" \
-        -l \"$placename\" -c \"$country_code\" \
-        -t \"$TEMPERATURE_UNIT\" -p \"$PRECIPITATION_UNIT\" \
-        -w \"$WIND_SPEED_UNIT\" $WIND_IN_DEGREES $series -o \"data-alt\" -")
-
-    if [[ "$LANGUAGE" == "en" ]] ; then
-        weather="$results"
-    else
-        weather=$(label_weather "$(printf "%b" "$results")")
-    fi
-
-    if [[ "$output_type" == "simple" ]] ; then
-        zenity --forms --title="$TITLE${NL}$place${NL}${NL}$symbol" \
-            --text="$weather${PADDING}" --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
-            --ok-label="${LRM}$RESULTS_BTN_OK"
-    else
-        zenity --text-info --title="$TITLE${NL}$place${NL}${NL}$symbol" \
-            --height=800 --width=600 --font="$RESULTS_FONT" \
-            --cancel-label="${LRM}$RESULTS_BTN_CANCEL" \
-            --ok-label="${LRM}$RESULTS_BTN_OK" <<< "$weather${PADDING}" 
-    fi
-
-    exit_code=$?
-    last_location="$location"
-    echo "$last_location" > "$last_location_file"
-
-    (( exit_code )) && break
-
 done
+
+end_banner="End of tests    $(date +"%FT%T.%3N")"
+echo "$(underline "$end_banner" -)${NL}" | \
+    tee -a "$tests_log_file" "$lang_log_file"
+
+if [[ "$UNSUPPORTED_LANGS" != "" ]] ; then
+    header="The following languages were unsupported by $ENGINE:${NL}"
+    echo "$header$UNSUPPORTED_LANGS${NL}" | tee -a "$tests_log_file"
+fi
+if [[ "$VALIDATION_FAILS" != "" ]] ; then
+    echo "The following native files were malformed:${NL}$VALIDATION_FAILS" | \
+        tee -a "$tests_log_file"
+fi
