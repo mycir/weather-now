@@ -3,7 +3,7 @@
 [**weather-now-menu**](../weather-now-menu) QC tests.
 
 ```
-Usage: wnm_test [language_code|index,index...|index_start_index..end_index]
+Usage: wnm_test [language_code|index,index...|start_index..end_index]
 
 Examples:
 
