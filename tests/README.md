@@ -16,3 +16,7 @@ Refer to [**langs**](langs) for index numbers.
 
 Could be adapted and applied to your own scripts that present a subject, other than Open-Meteo API data, in Zenity dialogs.
 
+## Dependencies
+
+[**uni**](https://github.com/arp242/uni) for collation of unicode digits and punctuation in [**trans**](https://github.com/soimort/translate-shell#translate-a-word) output - useful for troubleshooting.
+
