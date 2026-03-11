@@ -280,10 +280,12 @@ test_lang() {
         write_to_lang_log "EXTRA_PARAMS" "$temp_dir/trans-output.tmp" "$lang_log_file" 
         translate_codes CONDITIONS "$1" "$conditions_native_file" "Weather: "
         write_to_lang_log "CONDITIONS" "$temp_dir/trans-output.tmp" "$lang_log_file"
-        files="$locations_native_file $labels_native_file $conditions_native_file" 
-        for f in $files ; do 
-            (underline "$(basename "${f}")" -; cat "${f}"; echo) >> "$lang_log_file"
-        done
+        if (( SUPPORTED_LANG )) ; then
+            files="$locations_native_file $labels_native_file $conditions_native_file" 
+            for f in $files ; do 
+                (underline "$(basename "${f}")" -; cat "${f}"; echo) >> "$lang_log_file"
+            done
+        fi
     fi
 }
 
@@ -310,9 +312,7 @@ exec_command() {
         output="$(eval "$command" 2>&1)"
         status=$?
         if [[ "$output" == "" ]] ; then
-            err_msg1="Skipping test - trans returned an empty string. "
-            err_msg2="Language is probably unsupported by $ENGINE.${NL}"
-            echo "$err_msg1$err_msg2" | tee -a "$tests_log_file" 1>&2
+            echo "$UNSUPPORTED_MSG" | tee -a "$tests_log_file" 1>&2
             fail_exit "unsupported_language"
             break
         fi
@@ -362,90 +362,103 @@ validate_native_files() {
 
 write_to_lang_log() {
     trans_output="$(cat "$2")"
-    # shellcheck disable=SC2129
-    underline "Analyse $1 at $(date +"%FT%T.%3N")" - >> "$lang_log_file"
-    echo "${NL}Parsed translation:${NL}" >> "$lang_log_file"
-    parse_translation "$trans_output" >> "$lang_log_file"
-    echo "${NL}Raw translatiom:${NL}" >> "$lang_log_file"
-    echo "$trans_output" | fmt -w 140 >> "$lang_log_file"
-    echo "${NL}Digits and punctuation found in raw translation:${NL}" >> "$lang_log_file"
-    echo "$trans_output" | uni i -f '%cpoint %char %name %cat' | \
-        grep -i -E "decimal|other_punctuation" | sort -u -k 2 >> "$lang_log_file"
-    echo >> "$lang_log_file"
+    if [[ $trans_output != "" ]] ; then
+        # shellcheck disable=SC2129
+        underline "Analyse $1 at $(date +"%FT%T.%3N")" - >> "$lang_log_file"
+        echo "${NL}Parsed translation:${NL}" >> "$lang_log_file"
+        parse_translation "$trans_output" >> "$lang_log_file"
+        echo "${NL}Raw translatiom:${NL}" >> "$lang_log_file"
+        echo "$trans_output" | fmt -w 140 >> "$lang_log_file"
+        echo "${NL}Digits and punctuation found in raw translation:${NL}" >> "$lang_log_file"
+        echo "$trans_output" | uni i -f '%cpoint %char %name %cat' | \
+            grep -i -E "decimal|other_punctuation" | sort -u -k 2 >> "$lang_log_file"
+        echo >> "$lang_log_file"
+    else
+        SUPPORTED_LANG=0
+    fi
 }
 
 underline() { 
     echo "$1"; echo "${1//?/$2}"
 }
 
-# -------------------- setup and run tests ----------------------
+# -------------------- parse args and run tests ----------------------
 
-tests_log_dir="$script_dir/logs/"
-tests_log_file="$tests_log_dir/tests.log"
-read -rp "Remove directory '$tests_log_dir' ? [y/N] " answer
-[ "$answer" = y ] && rm -r "$tests_log_dir"
-mkdir -p "$tests_log_dir"
-temp_dir="$(dirname "$(mktemp -u --tmpdir)")"
 source "$script_dir/langs"
-CONDITIONS_INDEXES="[0] [1] [2] [3] [45] [48] [51] [53] [55] [56] "
-CONDITIONS_INDEXES+="[57] [61] [63] [65] [66] [67] [71] [73] [75] "
-CONDITIONS_INDEXES+="[77] [80] [81] [82] [85] [86] [95] [96] [99] "
-VALIDATION_FAILS=""
-UNSUPPORTED_LANGS=""
+argc=$#
 
-if [[ "$1" =~ [a-z]$ ]] ; then
-    for i in "${!LANGS[@]}"; do
-        if [[ "${LANGS[$i]}" =~ :$1 ]]; then
-            tests="$i "
-            break
+# shellcheck disable=SC2199
+for (( i=0; i < ${#LANGS[@]}; i++ )) ; do
+    code=${LANGS[i]#*:}
+    for arg in "$@" ; do
+        if [[ "$arg" == "$code" ]] ; then
+            tests+=( "$i" )
+            (( ${#tests[@]} == argc )) && break 2
         fi
     done
-elif [[ "$1" =~ [\d,]+ ]] ; then
-  end=${1##*,}
-  tests=${1//,/ }
-else
-  if [[ "$1" =~ \.\. ]] ; then
-    start=${1%..*}
-    end=${1#*..}
-  else
-    start=0
-    end=$(( ${#LANGS[@]} - 1 ))
-  fi
-  for (( i=start; i <= end; i++ )) ; do
-    [[ -v LANGS[$i] ]] && tests+="$i "
-  done
-fi
-
-log_header="Starting translation tests    $(date +"%FT%T.%3N")"
-echo "$(underline "$log_header" =)${NL}" > "$tests_log_file"
-
-for t in $tests ; do
-    lang="${LANGS[$t]#*:}"
-    lang_name=${LANGS[$t]%:*}
-    lang_log_file="$tests_log_dir/$lang.log"
-    rm -f "$lang_log_file"
-    start_banner="Starting test - $lang_name ($lang)   $(date +"%FT%T.%3N")"
-    echo "$(underline "$start_banner" -)${NL}" | \
-        tee -a "$tests_log_file" "$lang_log_file"
-    SUPPORTED_LANG=1
-    test_lang "$lang"
-    if (( SUPPORTED_LANG )) ; then
-        validate_native_files "$lang_name" "$lang"
-        (( t != end )) && sleep 10
-    else
-        UNSUPPORTED_LANGS+="$lang_name ($lang) - labels-native${NL}"
-    fi
 done
 
-end_banner="End of tests    $(date +"%FT%T.%3N")"
-echo "$(underline "$end_banner" -)${NL}" | \
-    tee -a "$tests_log_file" "$lang_log_file"
-
-if [[ "$UNSUPPORTED_LANGS" != "" ]] ; then
-    header="The following languages were unsupported by $ENGINE:${NL}"
-    echo "$header$UNSUPPORTED_LANGS${NL}" | tee -a "$tests_log_file"
+if ! (( argc )) ; then
+    tests=( 0 $(( ${#LANGS[@]} - 1 )) )
+    argc=2
 fi
-if [[ "$VALIDATION_FAILS" != "" ]] ; then
-    echo "The following native files were malformed:${NL}$VALIDATION_FAILS" | \
-        tee -a "$tests_log_file"
+
+if (( ${#tests[@]} == argc )) ; then
+    if (( argc == 2 ))  ; then
+        if (( tests[1] >= tests[0] )) ; then
+            start=${tests[0]} ; end=${tests[1]}
+        else
+            start=${tests[1]} ; end=${tests[0]}
+        fi
+        tests=()
+        for (( i=start; i <= end ; i++ )) ; do tests+=( "$i" ) ; done
+    fi
+    tests_log_dir="$script_dir/logs/"
+    tests_log_file="$tests_log_dir/tests.log"
+    read -rp "Remove directory '$tests_log_dir' ? [y/N] " answer
+    [ "$answer" = y ] && rm -r "$tests_log_dir"
+    mkdir -p "$tests_log_dir"
+    temp_dir="$(dirname "$(mktemp -u --tmpdir)")"
+    CONDITIONS_INDEXES="[0] [1] [2] [3] [45] [48] [51] [53] [55] [56] "
+    CONDITIONS_INDEXES+="[57] [61] [63] [65] [66] [67] [71] [73] [75] "
+    CONDITIONS_INDEXES+="[77] [80] [81] [82] [85] [86] [95] [96] [99] "
+    VALIDATION_FAILS=""
+    UNSUPPORTED_LANGS=""
+    UNSUPPORTED_MSG="Skipping test - trans returned an empty string. "
+    UNSUPPORTED_MSG+="Language is probably unsupported by $ENGINE.${NL}"
+    log_header="Starting translation tests    $(date +"%FT%T.%3N")"
+    echo "$(underline "$log_header" =)${NL}" > "$tests_log_file"
+
+    for t in "${tests[@]}" ; do
+        lang="${LANGS[$t]#*:}"
+        lang_name=${LANGS[$t]%:*}
+        lang_log_file="$tests_log_dir/$lang.log"
+        rm -f "$lang_log_file"
+        start_banner="Starting test - $lang_name ($lang)   $(date +"%FT%T.%3N")"
+        echo "$(underline "$start_banner" -)${NL}" | \
+            tee -a "$tests_log_file" "$lang_log_file"
+        SUPPORTED_LANG=1
+        test_lang "$lang"
+        if (( SUPPORTED_LANG )) ; then
+            validate_native_files "$lang_name" "$lang"
+            (( t != tests[${#tests[@]} - 1] )) && sleep 10
+        else
+            echo "$UNSUPPORTED_MSG" >> "$lang_log_file"
+            UNSUPPORTED_LANGS+="$lang_name ($lang) - labels-native${NL}"
+        fi
+    done
+
+    end_banner="End of tests    $(date +"%FT%T.%3N")"
+    echo "$(underline "$end_banner" -)${NL}" | \
+        tee -a "$tests_log_file" "$lang_log_file"
+    if [[ "$UNSUPPORTED_LANGS" != "" ]] ; then
+        header="The following languages were unsupported by $ENGINE:${NL}"
+        echo "$header$UNSUPPORTED_LANGS${NL}" | tee -a "$tests_log_file"
+    fi
+    if [[ "$VALIDATION_FAILS" != "" ]] ; then
+        echo "The following native files were malformed:${NL}$VALIDATION_FAILS" | \
+            tee -a "$tests_log_file"
+    fi
+else
+    echo "Invalid language code."
 fi

@@ -3,20 +3,18 @@
 [**weather-now-menu**](../weather-now-menu) QC tests.
 
 ```
-Usage: wnm_test [language_code|index,index...|start_index..end_index]
+Usage: wnm_test [language_code]...
 
 Examples:
 
-    wnm-test yue
-    wnm-test 21,46,98
-    wnm-test 129..145
+    wnm-test            # test all languages
+    wnm-test yue        # test yue
+    wnm-test lt mi      # test languages from lt to mi
 ```
-
-Refer to [**langs**](langs) for index numbers.
 
 Could be adapted and applied to your own scripts that present a subject, other than Open-Meteo API data, in Zenity dialogs.
 
 ## Dependencies
 
-[**uni**](https://github.com/arp242/uni) for collation of unicode digits and punctuation in [**trans**](https://github.com/soimort/translate-shell#translate-a-word) output - useful for troubleshooting.
+[**uni**](https://github.com/arp242/uni) for collation of unicode digits and punctuation in translations - useful for troubleshooting.
 
