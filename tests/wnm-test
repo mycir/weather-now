@@ -387,20 +387,20 @@ underline() {
 source "$script_dir/langs"
 argc=$#
 
-# shellcheck disable=SC2199
-for (( i=0; i < ${#LANGS[@]}; i++ )) ; do
-    code=${LANGS[i]#*:}
-    for arg in "$@" ; do
-        if [[ "$arg" == "$code" ]] ; then
-            tests+=( "$i" )
-            (( ${#tests[@]} == argc )) && break 2
-        fi
-    done
-done
-
 if ! (( argc )) ; then
     tests=( 0 $(( ${#LANGS[@]} - 1 )) )
     argc=2
+else
+    # shellcheck disable=SC2199
+    for (( i=0; i < ${#LANGS[@]}; i++ )) ; do
+        code=${LANGS[i]#*:}
+        for arg in "$@" ; do
+            if [[ "$arg" == "$code" ]] ; then
+                tests+=( "$i" )
+                (( ${#tests[@]} == argc )) && break 2
+            fi
+        done
+    done
 fi
 
 if (( ${#tests[@]} == argc )) ; then
