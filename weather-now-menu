@@ -180,7 +180,7 @@ translate_extra_parameters() {
 
     while IFS=':' read -r index translation ; do
         index=$(normalise_digits <<< "$index")
-        case "${params[i]}" in
+        case "${params[index]}" in
             "cape" )
                 k="CAPE"
                 translation="$k" ;;
