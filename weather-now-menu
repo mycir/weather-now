@@ -68,11 +68,10 @@ check_lang() {
 }
 
 parse_translation() {
-    result=$(echo "$1" | perl -CSD -lne 'print "$1:$5" while
-        /(\d+)([\s[:punct:]]+)([^[:punct:]]+)([\s[:punct:]]+)([^[:punct:]]+)/g')
-    while read -r line ; do
-        echo "${line%"${line##*[![:space:]]}"}"
-    done  <<< "$result"
+    perl -CSD -lne 'my $colons = 
+        "\x{003A}\x{02F8}\x{055D}\x{05C3}\x{1361}\x{17D6}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
+        print "$1:$2" while
+        /(\d+)[\p{Ps}\s]+.+?[$colons]+\s*(.*?)\s*[\p{P}]+.*?/g' <<< "$1"
 }
 
 normalise_digits() {
