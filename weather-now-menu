@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# shellcheck disable=SC1090,1091
-# shellcheck disable=SC2329
+# shellcheck disable=SC1090,1091,2129,2329
 
 NL=$'\n'
 TAB=$'\t'
@@ -68,15 +67,20 @@ check_lang() {
 }
 
 parse_translation() {
-    perl -CSD -lne 'my $colons = 
-        "\x{003A}\x{02F8}\x{055D}\x{05C3}\x{1361}\x{17D6}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
+    perl -CSD -lne '
+        # separators between label id and label text: stops, colons,
+        # armenian comma, hebrew sof pasuq, devanagari visarga,
+        # tibetan shad, ethiopic wordspace, khmer camnuc pii kuh
+        $seps = "\x{002E}\x{003A}\x{02F8}\x{055D}\x{05C3}\x{0903}\x{0F0D}";
+        $seps .= "\x{1361}\x{17D6}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
+        # punctuations, when ] is not returned: ethopic stop
+        $ends = "\x{002E}\x{1362}";
         print "$1:$2" while
-        /(\d+)[\p{Ps}\s]+.+?[$colons]+\s*(.*?)\s*[\p{P}]+.*?/g' <<< "$1"
+        /(\d+)[\p{Ps}\s]+[^$seps]+[$seps\s]+([^\p{Pe}$ends]+?)(?=\s*[\p{Pe}$ends]).*?/g' <<< "$1"
 }
 
 normalise_digits() {
-    perl -CS -MUnicode::UCD=charinfo -pe '
-        s/\p{Nd}/charinfo(ord($&))->{numeric}/ge'
+    perl -CS -MUnicode::UCD=charinfo -pe 's/\p{Nd}/charinfo(ord($&))->{numeric}/ge'
 }
 
 translate() {
