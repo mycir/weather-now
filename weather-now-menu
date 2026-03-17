@@ -33,9 +33,12 @@ error_exit() {
 }
 
 fail_exit() {
-    echo 100  >&"${progress_dlg[1]}"
-    zenity --warning --title="$TITLE${NL}$1" --text="$2" \
-        --ok-label="Exit" --icon="state-error" --width=500 --height=500
+    if [[ -n "${progress_dlg+x}" ]] ; then
+        echo 100  >&"${progress_dlg[1]}"
+    fi
+    [[ "$1" =~ engine ]] && h=200 || h=500
+    zenity --warning --title="$TITLE${NL}$1" --text="$2" --ok-label="Exit" \
+        --icon="state-error" --no-markup --width=500 --height="$h"
     >&2 echo "$1:${NL}${NL}$2"
     kill -s TERM $TOP_PID
 }
@@ -48,6 +51,7 @@ exec_command() {
         status=$?
         if (( status )); then
             status=$(error_exit "$command" "$status" "$output")
+            echo "fail"
         else
             echo "$output"
         fi
@@ -91,11 +95,12 @@ translate() {
 
     cmd="trans -b -4 -no-warn -e \"$ENGINE\" -4 en:$lang \"$trans_input\""
     translation="$(exec_command "$cmd")"
+    [[ "${ENGINE,,}" =~ google ]] && alt_engine="bing" || alt_engine="google"
     if [[ -z "${translation// }" ]] ; then
         err_msg1="Language code '$lang' may be unsupported by ${ENGINE^}. "
-        err_msg2="Otherwise, it may be due to a temporary translation engine "
-        err_msg3="error. If the problem persists try another translation engine "
-        err_msg4=$'(edit ENGINE in weather-now-menu.conf).\n\nInput:\n\n'
+        err_msg2="Otherwise, there may have been a temporary translation engine "
+        err_msg3="error. If the problem persists try an override, e.g.${NL}${NL}"
+        err_msg4="weather-now-menu $lang $alt_engine${NL}${NL}Input:${NL}${NL}"
         fail_exit "Translation failed" \
             "$err_msg1$err_msg2$err_msg3$err_msg4$(echo "$trans_input" | cut -c -400)" 
     fi
@@ -246,6 +251,19 @@ last_location_file="$script_dir/last-location"
 
 [[ -e "$locations_file" ]] && source "${locations_file}"
 
+[[ ! "${ENGINE,,}" =~ ^google$|^bing$ ]] && \
+    bad_engine="Configured engine '$ENGINE'"
+if [[ "${2,,}" =~ ^google$|^bing$ ]] ; then
+    ENGINE="$2"
+    unset bad_engine
+elif [[ "$2" != "" ]] ; then
+    bad_engine="'$2'"
+fi
+if [[ -v bad_engine ]] ; then
+    fail_exit "Bad translation engine" \
+        "$bad_engine is not accepted by weather-now-menu."
+fi
+
 if [[ -n "$1"  ]] ; then
     check_lang "$1"
     rm -f "$last_location_file"
@@ -288,8 +306,7 @@ fi
 while true; do
 
     if [ -n "${last_location+x}" ] ; then
-        unset location_data
-        unset symbol
+        unset location_data symbol
         results=""
     fi
     if [[ -f "$last_location_file" ]]; then

@@ -39,6 +39,10 @@ Translate locations and labels before displaying current weather:
 Display current weather and dialog labels in English, or per last supplied language code:
 
     weather-now-menu
+
+Override configured translation engine:
+
+    weather-now-menu [language code] [google|bing]
 ```
 
 ## More information
