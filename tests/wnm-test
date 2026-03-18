@@ -63,9 +63,9 @@ check_lang() {
     for code in $codes ; do
         [[ "$code" == "$1" ]] && return
     done
-    err_text="Invalid language code: $1"
-    if ! zenity --question --title="$TITLE - Error" \
-        --text="$err_text${NL}${NL}Do you wish to continue?" \
+    warning="Unknown language code: $1"
+    if ! zenity --question --title="$TITLE - Warning" \
+        --text="$warning${NL}${NL}Do you wish to continue?" \
         --width=300 --icon="data-warning" --no-markup ; then
         kill -s TERM $TOP_PID
     fi
