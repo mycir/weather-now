@@ -7,6 +7,8 @@ TAB=$'\t'
 # unicode justification markers
 LRM=$'\u200E'  # LEFT-TO-RIGHT MARK
 RLM=$'\u200F'  # RIGHT-TO-LEFT MARK
+# divisions terminator (fixes some untranslated labels)
+FW_STOP=$'\uFF0E'
 WARNING_ICON=$'\u26A0'
 
 # default language
@@ -77,8 +79,8 @@ parse_translation() {
         # ethiopic wordspace, khmer camnuc pii kuh, one dot leader
         $seps = "\x{002E}\x{003A}\x{02F8}\x{055D}\x{05C3}\x{0903}\x{0F0D}";
         $seps .= "\x{1361}\x{17D6}\x{2024}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
-        # punctuations, when ] is not returned: ethopic stop
-        $ends = "\x{002E}\x{1362}";
+        # punctuations, when ] is not returned: stop, ethopic stop, full width stop
+        $ends = "\x{002E}\x{1362}\x{FF0E}";
         print "$1:$2" while
         /(\d+)[\p{Ps}\s]+[^$seps]+[$seps\s]+([^\p{Pe}$ends]+?)(?=\s*[\p{Pe}$ends]).*?/g' <<< "$1"
 }
@@ -117,7 +119,7 @@ translate_locations() {
 
     for ((i=0; i < ${#locations[@]}; i++)); do
         location=${locations[$i]} 
-        trans_input+="$i [ $prefix${location%:*} ]. "
+        trans_input+="$i [ $prefix${location%:*} ]$FW_STOP "
     done
 
     echo "LOCATIONS_NATIVE=(" > "$output_file"
@@ -140,7 +142,7 @@ translate_labels() {
     local translation
 
     for ((i=0; i < ${#labels[@]}; i++)); do
-        trans_input+="$i [ $prefix${labels[$i]} ]. "
+        trans_input+="$i [ $prefix${labels[$i]} ]$FW_STOP "
     done
 
     while IFS=':' read -r index translation ; do
@@ -158,7 +160,7 @@ translate_codes() {
 
     for (( i=0; i < 100; i++ )) ; do
         if [[ ${CONDITIONS[${i}]} ]] ; then
-            trans_input+="$i [ $prefix${CONDITIONS[${i}]} ]. "
+            trans_input+="$i [ $prefix${CONDITIONS[${i}]} ]$FW_STOP "
         fi
     done
 
@@ -184,7 +186,7 @@ translate_extra_parameters() {
         p=${params[$i]}
         p="${p//_/ }"
         p="${p^}"
-        trans_input+="$i [ $prefix$p ]. "
+        trans_input+="$i [ $prefix$p ]$FW_STOP "
     done
 
     while IFS=':' read -r index translation ; do
