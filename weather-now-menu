@@ -17,7 +17,7 @@ trap "exit 1" TERM
 export TOP_PID=$$
 
 error_exit() {
-    cmd_info="${TEXT_CMD_INFO//0/$2}: ${NL}${NL}$1${NL}${NL}"
+    cmd_info="${TEXT_CMD_INFO//\*/$2}: ${NL}${NL}$1${NL}${NL}"
     output_info="$TEXT_OUTPUT:${NL}${NL}$3"
     
     if zenity --text-info --title="$TITLE${NL}$WARNING_ICON $TEXT_ERROR" \
@@ -74,10 +74,10 @@ check_lang() {
 parse_translation() {
     perl -CSD -lne '
         # separators between label id and label text: stops, colons,
-        # armenian comma, hebrew sof pasuq, devanagari visarga,
-        # tibetan shad, ethiopic wordspace, khmer camnuc pii kuh
+        # armenian comma, hebrew sof pasuq, devanagari visarga, tibetan shad,
+        # ethiopic wordspace, khmer camnuc pii kuh, one dot leader
         $seps = "\x{002E}\x{003A}\x{02F8}\x{055D}\x{05C3}\x{0903}\x{0F0D}";
-        $seps .= "\x{1361}\x{17D6}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
+        $seps .= "\x{1361}\x{17D6}\x{2024}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
         # punctuations, when ] is not returned: ethopic stop
         $ends = "\x{002E}\x{1362}";
         print "$1:$2" while
@@ -146,6 +146,7 @@ translate_labels() {
 
     while IFS=':' read -r index translation ; do
         index=$(normalise_digits <<< "$index")
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && translation="${translation^}"
         echo "${label_ids[$index]}=\"$translation\"" >> "$output_file"
     done  < <(translate "$trans_input" "$lang")
 }
@@ -166,6 +167,7 @@ translate_codes() {
 
     while IFS=':' read -r index translation ; do
         index=$(normalise_digits <<< "$index")
+        [[ "$LANGUAGE_DIRECTION" == "LTR" ]] && translation="${translation^}"
         echo "${TAB}[$index]=\"$translation\"" >> "$output_file"
     done < <(translate "$trans_input" "$lang")
 
