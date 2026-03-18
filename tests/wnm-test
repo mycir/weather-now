@@ -51,7 +51,6 @@ exec_command() {
         status=$?
         if (( status )); then
             status=$(error_exit "$command" "$status" "$output")
-            echo "fail"
         else
             echo "$output"
         fi
