@@ -67,9 +67,9 @@ NB Any subsequent change of language will overwrite alterations.
 
 ## Supported languages
 
-Google Translate has added many more languages since the last translate-shell release. In the case of a language code outside the 159 returned by trans -list-all, weather-now-menu will display a warning dialog with the option to continue nevertheless. A few random picks from [**list**](languages.md) displayed normally in weather-now-menu, albeit with a non-fatal 'error' warning from trans.
+Google Translate has added many more languages since the last translate-shell release. In the case of a language code outside the 159 returned by trans -list-all, weather-now-menu will display a warning dialog with the option to continue nevertheless. A few random picks from [**languages-google**](languages-google.md) displayed normally in weather-now-menu, albeit with a non-fatal 'error' warning from trans.
 
-Note that trans -list-all is a mix of different engine codes. For instance, prs is the Bing code for Dari, whereas for Google it is fa-AF .
+Note that trans -list-all is a mix of different engine codes. For instance, prs is the Bing code for Dari, whereas for Google it is fa-AF (see [**languages-bing**](languages-bing.md)).
 
 ## Specialist configs
 
