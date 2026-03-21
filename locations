@@ -3,7 +3,7 @@
 # define desired locations by name and ISO-3166-1 country code
 
 LOCATIONS=(
-    "London":GB
+    "London:GB"
     "Berlin:DE"
     "Paris:FR"
     "Athens:GR"
