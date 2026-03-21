@@ -12,11 +12,19 @@ done
 
 script_dir="$(dirname "${script_path}")"
 start="#!\/bin\/bash"
-end="\[\[ -e \"\$locations_file\" \]\]"
+end="script_dir"
 script_to_test="$script_dir/../weather-now-menu"
-
-# source globals, functions and setup from script under test
+# source globals, functions and setup from script_to_test
 source <(sed -n "/$start/,/$end/p" "$script_to_test")
+source "$script_dir/../configs/aviation/weather-now-menu.conf"
+locations_file="$script_dir/locations"
+locations_native_file="$script_dir/locations-native"
+labels_native_file="$script_dir/labels-native"
+conditions_native_file="$script_dir/conditions-native"
+last_location_file="$script_dir/last-location"
+
+[[ -e "$locations_file" ]] && \
+    source "${locations_file}" || LOCATIONS=( Utopia:AU )
 
 # wrap translation logic from script under test
 # and insert write_to_lang_log calls as required
@@ -118,6 +126,14 @@ parse_translation() {
 
 # ------------------- functions required for tests -------------------
 
+build_langs() {
+    mapfile -t LANGS < <(awk -F'|' -v start="$1" -v col="$2" -v pattern="$3" '
+        NR>=start && (pattern=="" || $col ~ pattern){
+            for(i=2;i<4;i++)gsub(/^[ \t]+|[ \t]+$/,"",$i)
+            printf "%s:%s\n" , $2, $3
+        }' "docs/$4")
+}
+
 validate_native_files() {
     if (grep -icE '(=$|="")' "$labels_native_file" > /dev/null) ; then
         VALIDATION_FAILS+="$1 ($2) - labels-native${NL}"
@@ -157,7 +173,15 @@ underline() {
 
 # -------------------- parse args and run tests ----------------------
 
-source "$script_dir/langs"
+(( ! (LANG_TEST % 2) )) && pattern="^[ \t]*🗸[ \t]*$"
+
+if (( LANG_TEST < 2 )) ; then
+    ENGINE="google"; start=10; col=4; lang_file="languages-google.md"
+else
+    ENGINE="bing"; start=15; col=5; lang_file="languages-bing.md"
+fi
+
+build_langs "$start" "$col" "$pattern" "$lang_file"
 argc=$#
 
 if ! (( argc )) ; then

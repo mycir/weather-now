@@ -1,7 +1,6 @@
 # wnm-test
 
-[**weather-now-menu**](../weather-now-menu) QC tests.
-
+[**weather-now-menu**](../weather-now-menu) QC tests. (Could be adapted and applied to your own scripts that present a subject, other than Open-Meteo API data, in Zenity dialogs.)
 ```
 Usage: wnm_test [language_code]...
 
@@ -11,8 +10,15 @@ Examples:
     wnm-test yue        # test yue
     wnm-test lt mi      # test languages from lt to mi
 ```
+Select engine and test mode by prefixing the command with an environment variable, as follows:
 
-Could be adapted and applied to your own scripts that present a subject, other than Open-Meteo API data, in Zenity dialogs.
+```
+    LANG_TEST=0 wnm-test [language_code]... # Google, only trans codes (default)
+    LANG_TEST=1 wnm-test [language_code]... # Google, all codes
+    LANG_TEST=2 wnm-test [language_code]... # Bing, only trans codes
+    LANG_TEST=3 wnm-test [language_code]... # Bing, all codes
+```
+Take language codes from [**languages-google**](../docs/languages-google.md) or [**languages-bing**](../docs/languages-bing.md) as appropriate to engine and mode.
 
 ## Dependencies
 
