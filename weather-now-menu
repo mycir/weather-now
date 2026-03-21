@@ -253,7 +253,8 @@ labels_native_file="$script_dir/labels-native"
 conditions_native_file="$script_dir/conditions-native"
 last_location_file="$script_dir/last-location"
 
-[[ -e "$locations_file" ]] && source "${locations_file}"
+[[ -e "$locations_file" ]] && \
+    source "${locations_file}" || LOCATIONS=( Utopia:AU )
 
 [[ ! "${ENGINE,,}" =~ ^google$|^bing$ ]] && \
     bad_engine="Configured engine '$ENGINE'"
