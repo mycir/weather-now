@@ -17,7 +17,7 @@ script_to_test="$script_dir/../weather-now-menu"
 # source globals, functions and setup from script_to_test
 source <(sed -n "/$start/,/$end/p" "$script_to_test")
 source "$script_dir/../configs/aviation/weather-now-menu.conf"
-locations_file="$script_dir/locations"
+locations_file="$script_dir/../locations"
 locations_native_file="$script_dir/locations-native"
 labels_native_file="$script_dir/labels-native"
 conditions_native_file="$script_dir/conditions-native"
