@@ -14,6 +14,8 @@ WARNING_ICON=$'\u26A0'
 # default language
 LANGUAGE="en"
 LANGUAGE_DIRECTION="LTR"
+# rtl langs added since last translate-shell release
+EXTRA_RTL_LANGS=( bal fa-AF iw arz ary ks pnb ydd )
 
 trap "exit 1" TERM
 export TOP_PID=$$
@@ -279,7 +281,8 @@ if [[ -n "$1"  ]] ; then
         rm -f "$locations_native_file"
     else
         echo "LANGUAGE=\"$1\"" > "$labels_native_file"
-        if trans -L "$1" | grep -q "R-to-L" ; then
+        if trans -L "$1" | grep -q "R-to-L" || \
+                [[ ${EXTRA_RTL_LANGS[*]} =~ $1 ]] ; then
             LANGUAGE_DIRECTION="RTL"
             echo 'LANGUAGE_DIRECTION="RTL"' >> "$labels_native_file"
         else
