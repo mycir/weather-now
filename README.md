@@ -63,7 +63,9 @@ NB Any subsequent change of language will overwrite alterations.
 
 **Important! In the case of RTL languages, weather-now-menu must be run from a terminal that fully supports RTL languages, e.g. gnome-terminal or KDE Konsole. If running from the VSCode integrated terminal (as of v1.109.2), expect labels-native to contain translations rendered back to front, i.e. nonsense.**
 
-**Regex parsing of translations is geared for the default ENGINE=google setting in weather-now-menu.conf . However, some languages are problematic and ENGINE=bing may produce a better result, known cases are as follows: Armenian, Myanmar, Tibetan, Turkmen, Uzbek**
+Regex parsing of translations is geared for the default ENGINE=google setting in weather-now-menu.conf . However, some languages are problematic and whilst Bing may produce a more complete result, translations may be of inferior quality. Known cases are as follows.
+
+Myanmar: Google, labels.native, some labels untranslated; Bing, conditions.native, translation of inferior quality.</br>Tibetan: Google, conditions.native, one label untranslated.
 
 ## Supported languages
 
