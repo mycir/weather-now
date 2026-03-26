@@ -74,12 +74,13 @@ exec_command() {
 
 parse_translation() {
     echo "$1" > "$temp_dir/trans-output.tmp"
-    perl -CSD -lne '
+    perl -CSD -slne '
         $seps = "\x{002E}\x{003A}\x{02F8}\x{055D}\x{05C3}\x{0903}\x{0F0D}";
-        $seps .= "\x{1361}\x{17D6}\x{A789}\x{FE13}\x{FE55}\x{FF1A}";
-        $ends = "\x{002E}\x{0964}\x{1362}\x{FF0E}";
+        $seps .= "\x{1361}\x{17D6}\x{2024}\x{A789}\x{FE13}\x{FE55}\x{FF1A}$opt_sep";
+        $ends = "\x{002E}\x{0964}\x{104B}\x{1362}\x{FF0E}";
         print "$1:$2" while
-        /(\d+)[\p{Ps}\s]+[^$seps]+[$seps\s]+([^\p{Pe}$ends]+?)(?=\s*[\p{Pe}$ends]).*?/g' <<< "$1"
+        /(\d+)[\p{Ps}\s]+[^$seps]+[$seps\s]+([^\p{Pe}$ends]+?)(?=\s*[\p{Pe}$ends]).*?/g' \
+            -- -opt_sep="$2" <<< "$1"
 }
 
 # ------------------- functions required for tests -------------------
