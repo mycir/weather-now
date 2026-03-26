@@ -119,7 +119,7 @@ write_to_lang_log() {
         underline "Analyse $1 at $(date +"%FT%T.%3N")" - >> "$lang_log_file"
         echo "${NL}Parsed translation:${NL}" >> "$lang_log_file"
         parse_translation "$trans_output" >> "$lang_log_file"
-        echo "${NL}Raw translatiom:${NL}" >> "$lang_log_file"
+        echo "${NL}Raw translation (wrapped):${NL}" >> "$lang_log_file"
         echo "$trans_output" | fmt -w 140 >> "$lang_log_file"
         info="Digits, punctuation and spacing marks found in raw translation:"
         echo "${NL}$info${NL}" >> "$lang_log_file"

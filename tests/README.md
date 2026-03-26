@@ -29,7 +29,7 @@ Take language codes from [**languages-google**](../docs/languages-google.md) or 
 Translations returned for Indo-European languages are generally consistent with the input format, i.e:
 
 ```
-<index_number> [ <label_id>: <label_text> ].
+<index_number> [ <label_id>: <label_text> ]. # '.' is actually U+FF0E (FULLWIDTH FULL STOP)*
 ```
 
 Translations of Caucasus languages show inconsistencies though. In Armenian, Google substitues either the Armenian Comma U+055D or a full stop for the colon, and sometimes omits the space before the closing square bracket.
@@ -41,5 +41,7 @@ Various unicode colons may be substituted for the ASCII colon and in Sanskrit it
 In a few cases, Bing may produce a better result.
 
 Hopefully, the latest perl regex covers most edge cases.
+
+\* Addresses some peculiarities in translations. For example, 'Feels like' is returned verbatim, untranslated, in Google Greek if an 'ASCII' full stop is used.  
 
 
