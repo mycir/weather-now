@@ -245,6 +245,14 @@ label_weather() {
     echo "$weather"
 }
 
+ordinals_to_native() (
+    for ((i=0; i < ${#1}; i++ )) ; do
+        ordinal="${1:i:1}"
+        words+="${!ordinal} "    
+    done
+    echo "${words::-1}"
+)
+
 script_path="${0}"
 
 while [ -L "${script_path}" ] ; do
@@ -419,6 +427,12 @@ while true; do
         k="${line%%:*}"
         v=${line#*: }
         case $k in
+        "Wind direction")
+            if [[ "$LANGUAGE" != "en" ]] ; then
+                results+="$k: $(ordinals_to_native "$v")${NL}"
+            else
+                results+="$line${NL}"
+            fi ;;
         "Conditions")
             code=${v%[*}
             s=${v#*[};description=${s%*]}
