@@ -428,7 +428,7 @@ while true; do
         v=${line#*: }
         case $k in
         "Wind direction")
-            if [[ "$LANGUAGE" != "en" ]] ; then
+            if [[ "$LANGUAGE" != "en" ]] && ! [[ -v WIND_IN_DEGREES ]] ; then
                 results+="$k: $(ordinals_to_native "$v")${NL}"
             else
                 results+="$line${NL}"
